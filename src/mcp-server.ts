@@ -12,7 +12,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   generateActionPlan,
-  getAvailableProviders,
   getConfiguredProviders,
   type Provider,
 } from "./lib/ai-clients.js";
@@ -50,8 +49,14 @@ server.tool(
       .describe(
         "AI provider to use. Defaults to first available if not specified."
       ),
+    user_prompt_override: z
+      .string()
+      .optional()
+      .describe(
+        "Optional full user message to send instead of the default prompt + markdown. When provided, this is used as the single user message."
+      ),
   },
-  async ({ markdown, provider }) => {
+  async ({ markdown, provider, user_prompt_override }) => {
     const configured = getConfiguredProviders();
     if (configured.length === 0 && !provider) {
       return {
@@ -65,14 +70,28 @@ server.tool(
       };
     }
 
-    const available = getAvailableProviders();
+    if (provider && !configured.includes(provider as Provider)) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: Provider "${provider}" is not configured. Configured providers: ${configured.join(", ") || "none"}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     const selectedProvider: Provider =
-      provider && available.includes(provider as Provider)
-        ? (provider as Provider)
-        : (configured[0] as Provider) || "openai";
+      (provider as Provider) || (configured[0] as Provider) || "openai";
 
     try {
-      const result = await generateActionPlan(markdown, selectedProvider);
+      const result = await generateActionPlan(markdown, selectedProvider, {
+        userPromptOverride:
+          user_prompt_override != null && user_prompt_override !== ""
+            ? user_prompt_override
+            : undefined,
+      });
       return {
         content: [
           {

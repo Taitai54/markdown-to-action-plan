@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { getAvailableProviders } from "@/lib/ai-clients";
+import { getAvailableProviders, getConfiguredProviders } from "@/lib/ai-clients";
 
 export async function GET() {
-  return NextResponse.json({ providers: getAvailableProviders() });
+  return NextResponse.json({
+    providers: getConfiguredProviders(),
+    allProviders: getAvailableProviders(),
+  });
 }

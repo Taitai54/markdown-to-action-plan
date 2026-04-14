@@ -4,6 +4,7 @@ interface FileItem {
   name: string;
   size: number;
   content: string;
+  lastModified?: number;
 }
 
 interface FileListProps {
@@ -14,6 +15,15 @@ interface FileListProps {
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function formatDate(ms: number): string {
+  const d = new Date(ms);
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export default function FileList({ files, onRemove }: FileListProps) {
@@ -34,6 +44,11 @@ export default function FileList({ files, onRemove }: FileListProps) {
               <span className="text-gray-400 text-sm">📄</span>
               <span className="text-sm text-gray-700 truncate">{file.name}</span>
               <span className="text-xs text-gray-400">{formatSize(file.size)}</span>
+              {file.lastModified != null && (
+                <span className="text-xs text-gray-400 whitespace-nowrap" title="Source last modified">
+                  {formatDate(file.lastModified)}
+                </span>
+              )}
             </div>
             <button
               onClick={() => onRemove(i)}

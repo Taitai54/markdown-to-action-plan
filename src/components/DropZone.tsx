@@ -7,6 +7,7 @@ interface UploadedFile {
   name: string;
   size: number;
   content: string;
+  lastModified?: number;
 }
 
 interface DropZoneProps {
@@ -27,6 +28,7 @@ export default function DropZone({ onFilesAdded }: DropZoneProps) {
                   name: file.name,
                   size: file.size,
                   content: reader.result as string,
+                  lastModified: file.lastModified,
                 });
               reader.onerror = reject;
               reader.readAsText(file);

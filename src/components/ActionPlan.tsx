@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { marked } from "marked";
 import { saveAs } from "file-saver";
 import { MasterActionPlan, Milestone } from "@/lib/ai-clients";
@@ -10,6 +10,19 @@ import { MasterActionPlan, Milestone } from "@/lib/ai-clients";
 interface ActionPlanProps {
   plan: MasterActionPlan | null;
 }
+
+function sanitizeFilename(title: string): string {
+  const base = title.replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, "") || "master-action-plan";
+  return base;
+}
+
+function ensureExtension(name: string, ext: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(ext)) return name;
+  return name.trim() ? `${name.trim()}${ext.startsWith(".") ? ext : `.${ext}`}` : `master-action-plan${ext.startsWith(".") ? ext : `.${ext}`}`;
+}
+
+const supportsSavePicker = typeof window !== "undefined" && "showSaveFilePicker" in window;
 
 const PRIORITY_STYLES = {
   high: "bg-red-100 text-red-700",
@@ -22,8 +35,8 @@ function MilestoneCard({ milestone }: { milestone: Milestone }) {
 
   return (
     <div
-      className={`border rounded-lg p-3 transition-all ${
-        done ? "bg-gray-50 opacity-60" : "bg-white"
+      className={`rounded-xl border p-4 transition-all ${
+        done ? "bg-gray-50 opacity-70 border-gray-200" : "bg-white border-gray-200"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -34,6 +47,16 @@ function MilestoneCard({ milestone }: { milestone: Milestone }) {
           className="mt-1 h-4 w-4 rounded border-gray-300 accent-blue-600"
         />
         <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded bg-blue-100 text-blue-700">
+              {milestone.category}
+            </span>
+            <span
+              className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded ${PRIORITY_STYLES[milestone.priority]}`}
+            >
+              {milestone.priority}
+            </span>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <h3
               className={`text-sm font-medium ${
@@ -42,18 +65,10 @@ function MilestoneCard({ milestone }: { milestone: Milestone }) {
             >
               {milestone.title}
             </h3>
-            <p className="text-[11px] text-gray-500 mt-1">
-              ✅ <strong>Done when:</strong> {milestone.done_when}
-            </p>
-            <span
-              className={`text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded ${PRIORITY_STYLES[milestone.priority]}`}
-            >
-              {milestone.priority}
-            </span>
-            <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
-              {milestone.category}
-            </span>
           </div>
+          <p className="text-[12px] text-gray-600 mt-2">
+            <strong>Done when:</strong> {milestone.done_when}
+          </p>
         </div>
       </div>
     </div>
@@ -64,11 +79,62 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const defaultDownloadName = useMemo(
+    () => (plan ? sanitizeFilename(plan.title) : "master-action-plan"),
+    [plan]
+  );
+  const [downloadFilename, setDownloadFilename] = useState(defaultDownloadName);
+
+  useEffect(() => {
+    if (plan) setDownloadFilename(defaultDownloadName);
+  }, [plan, defaultDownloadName]);
+
   if (!plan) return null;
 
-  const downloadMarkdown = () => {
+  const currentDownloadName = downloadFilename || defaultDownloadName;
+  const safeMilestones = Array.isArray(plan.milestones) ? plan.milestones : [];
+
+  const saveBlobWithPicker = async (
+    blob: Blob,
+    suggestedName: string,
+    _mimeType: string,
+    extension: string
+  ) => {
+    if (supportsSavePicker) {
+      try {
+        const w = window as unknown as {
+          showSaveFilePicker: (o: {
+            suggestedName: string;
+            types?: { description: string; accept: Record<string, string[]> }[];
+          }) => Promise<{
+            createWritable: () => Promise<{
+              write: (data: Blob) => Promise<void>;
+              close: () => Promise<void>;
+            }>;
+          }>;
+        };
+        const handle = await w.showSaveFilePicker({
+          suggestedName,
+          types:
+            extension === ".md"
+              ? [{ description: "Markdown", accept: { "text/markdown": [".md"] } }]
+              : [{ description: "Word document", accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (err) {
+        if ((err as { name?: string })?.name === "AbortError") return;
+      }
+    }
+    saveAs(blob, suggestedName);
+  };
+
+  const downloadMarkdown = async () => {
     const blob = new Blob([plan.implementation_document], { type: "text/markdown" });
-    saveAs(blob, "master-action-plan.md");
+    const name = ensureExtension(currentDownloadName, ".md");
+    await saveBlobWithPicker(blob, name, "text/markdown", ".md");
   };
 
   const copyForGoogleDocs = async () => {
@@ -137,7 +203,13 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
       if (!response.ok) throw new Error("Server failed to generate Docx");
 
       const docxBlob = await response.blob();
-      saveAs(docxBlob, `${plan.title.replace(/[^a-z0-9]/gi, "_")}.docx`);
+      const name = ensureExtension(currentDownloadName, ".docx");
+      await saveBlobWithPicker(
+        docxBlob,
+        name,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".docx"
+      );
     } catch (err) {
       console.error("Word export failed:", err);
       alert("Failed to export Word document. Please try Markdown or Copy for GDocs.");
@@ -147,14 +219,29 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="bg-white border rounded-xl p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <h2 className="text-xl font-bold text-gray-900">{plan.title}</h2>
-          <div className="flex flex-wrap gap-2">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <section className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.2em] text-blue-700 font-semibold">
+                Generated Action Plan
+              </p>
+              <h2 className="text-2xl font-bold text-gray-900 leading-tight">{plan.title}</h2>
+              <p className="text-gray-700 text-sm leading-relaxed max-w-3xl">{plan.summary}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-2 shrink-0">
+              <div className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-center">
+                <div className="text-lg font-bold text-blue-700">{safeMilestones.length}</div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-500">Milestones</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
             <button
               onClick={downloadMarkdown}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors flex items-center gap-2"
+              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors flex items-center justify-center gap-2"
               title="Download as raw Markdown file"
             >
               <span>📄</span> Markdown
@@ -162,7 +249,7 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
             <button
               onClick={downloadWord}
               disabled={exporting}
-              className="text-xs px-3 py-1.5 rounded-lg border border-blue-100 bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-blue-100 bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               title="Download as Microsoft Word document"
             >
               <span>{exporting ? "⏳" : "📝"}</span> Word Doc
@@ -170,36 +257,63 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
             <button
               onClick={copyForGoogleDocs}
               disabled={copying}
-              className="text-xs px-3 py-1.5 rounded-lg border border-green-100 bg-green-50 hover:bg-green-100 text-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-green-100 bg-green-50 hover:bg-green-100 text-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               title="Copy as Rich Text for Google Docs"
             >
               <span>{copying ? "⏳" : "📋"}</span> Copy for GDocs
             </button>
           </div>
-        </div>
-        <p className="text-gray-600 text-sm italic border-l-4 border-blue-500 pl-4 mb-8">
-          {plan.summary}
-        </p>
 
-        <div className="prose prose-sm max-w-none prose-blue prose-headings:text-gray-900 prose-headings:font-bold prose-p:text-gray-700 prose-li:text-gray-700 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {plan.implementation_document}
-          </ReactMarkdown>
-        </div>
-      </div>
-
-      {plan.milestones.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-widest">
-            Key Milestones
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {plan.milestones.map((m, i) => (
-              <MilestoneCard key={i} milestone={m} />
-            ))}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <label htmlFor="save-as-filename" className="text-xs font-medium text-gray-500 whitespace-nowrap">
+              Save as:
+            </label>
+            <input
+              id="save-as-filename"
+              type="text"
+              value={downloadFilename}
+              onChange={(e) => setDownloadFilename(e.target.value)}
+              placeholder={defaultDownloadName}
+              className="flex-1 min-w-0 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              title="Filename used for Markdown and Word downloads (extension added automatically)"
+            />
+            <span className="text-xs text-gray-400 self-start sm:self-auto">.md / .docx</span>
           </div>
         </div>
-      )}
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">
+            Implementation Playbook
+          </h3>
+          <div className="prose prose-sm max-w-none text-gray-800 prose-headings:text-gray-900 prose-headings:font-bold prose-p:text-gray-800 prose-li:text-gray-800 prose-strong:text-gray-900 prose-a:text-blue-700 prose-code:text-blue-700 prose-code:bg-blue-50 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {plan.implementation_document}
+            </ReactMarkdown>
+          </div>
+        </div>
+
+        <aside className="space-y-4 lg:sticky lg:top-4 h-fit">
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">Milestones</h3>
+            <p className="text-xs text-gray-500">
+              Track progress as you work through the plan.
+            </p>
+          </div>
+          {safeMilestones.length > 0 ? (
+            <div className="space-y-3">
+              {safeMilestones.map((m, i) => (
+                <MilestoneCard key={i} milestone={m} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-500">
+              No milestones returned for this plan.
+            </div>
+          )}
+        </aside>
+      </section>
     </div>
   );
 }
