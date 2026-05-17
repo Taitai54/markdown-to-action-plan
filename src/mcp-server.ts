@@ -55,8 +55,27 @@ server.tool(
       .describe(
         "Optional full user message to send instead of the default prompt + markdown. When provided, this is used as the single user message."
       ),
+    system_prompt_preset_id: z
+      .enum(["strict-playbook", "summary", "research-oriented", "minimal"])
+      .optional()
+      .describe("System prompt preset (default: strict-playbook)"),
+    system_prompt_override: z
+      .string()
+      .optional()
+      .describe("Full system prompt override (takes precedence over preset)"),
+    model_override: z
+      .string()
+      .optional()
+      .describe("Provider-specific model id override"),
   },
-  async ({ markdown, provider, user_prompt_override }) => {
+  async ({
+    markdown,
+    provider,
+    user_prompt_override,
+    system_prompt_preset_id,
+    system_prompt_override,
+    model_override,
+  }) => {
     const configured = getConfiguredProviders();
     if (configured.length === 0 && !provider) {
       return {
@@ -90,6 +109,15 @@ server.tool(
         userPromptOverride:
           user_prompt_override != null && user_prompt_override !== ""
             ? user_prompt_override
+            : undefined,
+        systemPromptOverride:
+          system_prompt_override != null && system_prompt_override !== ""
+            ? system_prompt_override
+            : undefined,
+        systemPromptPresetId: system_prompt_preset_id,
+        modelOverride:
+          model_override != null && model_override !== ""
+            ? model_override
             : undefined,
       });
       return {

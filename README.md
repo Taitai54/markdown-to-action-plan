@@ -8,7 +8,7 @@ Unlike standard AI summaries, this tool focuses on **tactical execution**—prov
 
 - **Unified Master Plan:** Consolidates multiple source files into one logical, step-by-step implementation document.
 - **Tactical & Atomic:** Every action is described in terms of specific UI interactions (buttons, menus, URLs) and expected outcomes.
-- **Multi-Provider Support:** Switch between **OpenAI (GPT-4o)**, **Perplexity (Sonar)**, **Gemini 2.0 Flash**, and **OpenRouter (Claude 3.5 Sonnet)**.
+- **Multi-Provider Support:** Switch between **OpenAI (GPT-4o / GPT-4o mini)**, **Perplexity (Sonar)**, **Gemini 2.0 Flash**, and **OpenRouter** (GPT-4o mini, Qwen, Llama, Mistral presets).
 - **Milestone Tracking:** High-level milestones with explicit "✅ Done when" criteria to track your progress.
 - **Flexible Export Options:**
   - **Download .md:** Full raw markdown for your local notes.
@@ -45,12 +45,30 @@ OPENROUTER_API_KEY=your_key
 ```
 
 ### 4. Running the Web App
+
+**Windows (easiest):** double-click `run.bat` or `start-action-plan.bat` in the project folder. It installs dependencies if needed, prints which API keys are set, starts the dev server, and opens http://localhost:3000. Keep the console window open while you use the app.
+
+If the server crashes immediately with a Turbopack error, run `npm run dev` from the project folder (the script uses webpack to avoid that on Windows).
+
+**Port in use / dev lock error:** run `stop-action-plan.bat` first (stops old servers on ports 3000–3001 and clears the `.next` lock), then `run.bat` again.
+
 ```bash
 npm run dev
 ```
+
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 5. Running the MCP Server
+### 5. Smoke-test configured providers
+
+**Windows:** run `check-llms.bat`
+
+```bash
+npm run check:llms
+```
+
+Runs a minimal fixture against each provider that has an API key in `.env.local`.
+
+### 6. Running the MCP Server
 To use this as an MCP tool (e.g., in Claude Desktop or Cursor):
 ```bash
 npx tsx src/mcp-server.ts

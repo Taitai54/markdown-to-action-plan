@@ -1,6 +1,6 @@
 "use client";
 
-type Provider = "openai" | "perplexity" | "gemini" | "openrouter";
+import type { Provider } from "@/lib/ai-clients";
 
 interface ApiSelectorProps {
   selected: Provider;

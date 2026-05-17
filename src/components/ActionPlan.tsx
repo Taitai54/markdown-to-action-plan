@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect } from "react";
 import { marked } from "marked";
 import { saveAs } from "file-saver";
 import { MasterActionPlan, Milestone } from "@/lib/ai-clients";
+import { escapeHtml } from "@/lib/escape-html";
 
 interface ActionPlanProps {
   plan: MasterActionPlan | null;
@@ -30,8 +31,29 @@ const PRIORITY_STYLES = {
   low: "bg-green-100 text-green-700",
 };
 
-function MilestoneCard({ milestone }: { milestone: Milestone }) {
-  const [done, setDone] = useState(false);
+function milestoneStorageKey(planTitle: string): string {
+  return `map-milestones:${sanitizeFilename(planTitle)}`;
+}
+
+function loadMilestoneDone(planTitle: string): Record<number, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(milestoneStorageKey(planTitle));
+    return raw ? (JSON.parse(raw) as Record<number, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function MilestoneCard({
+  milestone,
+  done,
+  onToggle,
+}: {
+  milestone: Milestone;
+  done: boolean;
+  onToggle: () => void;
+}) {
 
   return (
     <div
@@ -43,7 +65,7 @@ function MilestoneCard({ milestone }: { milestone: Milestone }) {
         <input
           type="checkbox"
           checked={done}
-          onChange={() => setDone(!done)}
+          onChange={onToggle}
           className="mt-1 h-4 w-4 rounded border-gray-300 accent-blue-600"
         />
         <div className="flex-1 min-w-0">
@@ -84,10 +106,31 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
     [plan]
   );
   const [downloadFilename, setDownloadFilename] = useState(defaultDownloadName);
+  const [milestoneDone, setMilestoneDone] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (plan) setDownloadFilename(defaultDownloadName);
   }, [plan, defaultDownloadName]);
+
+  useEffect(() => {
+    if (plan) setMilestoneDone(loadMilestoneDone(plan.title));
+  }, [plan?.title]);
+
+  const toggleMilestone = (index: number) => {
+    if (!plan) return;
+    setMilestoneDone((prev) => {
+      const next = { ...prev, [index]: !prev[index] };
+      try {
+        localStorage.setItem(
+          milestoneStorageKey(plan.title),
+          JSON.stringify(next)
+        );
+      } catch {
+        /* ignore quota errors */
+      }
+      return next;
+    });
+  };
 
   if (!plan) return null;
 
@@ -186,8 +229,8 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
           </style>
         </head>
         <body>
-          <h1>${plan.title}</h1>
-          <p><em>${plan.summary}</em></p>
+          <h1>${escapeHtml(plan.title)}</h1>
+          <p><em>${escapeHtml(plan.summary)}</em></p>
           <hr/>
           ${htmlContent}
         </body>
@@ -304,7 +347,12 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
           {safeMilestones.length > 0 ? (
             <div className="space-y-3">
               {safeMilestones.map((m, i) => (
-                <MilestoneCard key={i} milestone={m} />
+                <MilestoneCard
+                  key={i}
+                  milestone={m}
+                  done={!!milestoneDone[i]}
+                  onToggle={() => toggleMilestone(i)}
+                />
               ))}
             </div>
           ) : (

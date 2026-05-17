@@ -8,15 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-- `npm run dev` — local app
+- `npm run dev` — local app (uses `--webpack`; Turbopack can fail on Windows with "Access is denied")
 - `npm run lint` — ESLint
 - `npm run check:llms` — smoke test each **configured** provider (loads `.env.local` first; see `src/scripts/provider-smoke.ts`)
 
-Windows: `start-action-plan.bat` (prints which API keys are set), `check-llms.bat` (runs `check:llms`).
+Windows: `run.bat` or `start-action-plan.bat` (dev server + browser; auto-cleans port 3000), `stop-action-plan.bat` (kill stuck dev server), `check-llms.bat` (runs `check:llms`).
 
 ## Environment (`.env.local`)
 
-Set only the providers you use: `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`. Optional: `OPENROUTER_MODEL` (default in code: `openai/gpt-4o-mini`).
+Set only the providers you use: `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`. Optional: `OPENROUTER_MODEL` (default in code: `openai/gpt-4o-mini`), `GENERATE_API_SECRET` (protects `/api/generate` and `/api/export/docx` when deployed), `MAX_MARKDOWN_CHARS`, `LLM_REQUEST_TIMEOUT_MS`.
 
 ## Architecture notes
 

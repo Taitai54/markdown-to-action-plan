@@ -191,7 +191,12 @@ function parseRobustJson(content: string): unknown {
     try {
       return JSON.parse(fixed);
     } catch {
-      console.error("Failed to parse fixed JSON (length:", fixed.length, "):", fixed.slice(0, 500) + "...");
+      console.error(
+        "Failed to parse AI JSON response (length:",
+        fixed.length,
+        "):",
+        err.message
+      );
       throw new Error(`JSON parse error: ${err.message}`);
     }
   }
@@ -304,6 +309,16 @@ function normalizeMilestones(milestones: unknown): Milestone[] {
   return parsedMilestones;
 }
 
+const LLM_TIMEOUT_MS = Number.parseInt(
+  process.env.LLM_REQUEST_TIMEOUT_MS ?? "180000",
+  10
+);
+
+/** Providers that accept OpenAI-style `response_format: json_object`. */
+function supportsJsonObjectMode(provider: Provider): boolean {
+  return provider === "openai" || provider === "openrouter" || provider === "gemini";
+}
+
 export async function generateActionPlan(
   markdown: string,
   provider: Provider,
@@ -333,20 +348,26 @@ export async function generateActionPlan(
       ? options.modelOverride
       : config.model;
 
+  const body: Record<string, unknown> = {
+    model: modelName,
+    messages: [
+      { role: "system", content: systemContent },
+      { role: "user", content: userContent },
+    ],
+    temperature: 0.3,
+  };
+  if (supportsJsonObjectMode(provider)) {
+    body.response_format = { type: "json_object" };
+  }
+
   const response = await fetch(config.endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify({
-      model: modelName,
-      messages: [
-        { role: "system", content: systemContent },
-        { role: "user", content: userContent },
-      ],
-      temperature: 0.3,
-    }),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
 
   if (!response.ok) {

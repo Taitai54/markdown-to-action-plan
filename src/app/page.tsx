@@ -6,7 +6,7 @@ import ApiSelector from "@/components/ApiSelector";
 import FileList from "@/components/FileList";
 import ActionPlan from "@/components/ActionPlan";
 
-import { MasterActionPlan } from "@/lib/ai-clients";
+import { MasterActionPlan, type Provider } from "@/lib/ai-clients";
 import {
   buildUserPrompt,
   getSystemPromptForPreset,
@@ -14,8 +14,7 @@ import {
 } from "@/lib/prompt";
 import type { SystemPromptPresetId } from "@/lib/prompt";
 import { concatenateMarkdown } from "@/lib/markdown-parser";
-
-type Provider = "openai" | "perplexity" | "gemini" | "openrouter";
+import { MAX_MARKDOWN_CHARS, formatCharLimit } from "@/lib/limits";
 
 interface UploadedFile {
   name: string;
@@ -113,6 +112,13 @@ export default function Home() {
 
   const handleGenerate = async () => {
     if (files.length === 0) return;
+
+    if (concatenatedMarkdown.length > MAX_MARKDOWN_CHARS) {
+      setError(
+        `Uploaded markdown is too large (${concatenatedMarkdown.length} chars). Maximum is ${formatCharLimit(MAX_MARKDOWN_CHARS)} characters.`
+      );
+      return;
+    }
 
     setLoading(true);
     setError(null);

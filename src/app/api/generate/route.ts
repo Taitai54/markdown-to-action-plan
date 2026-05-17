@@ -5,9 +5,14 @@ import {
   getAvailableProviders,
   getConfiguredProviders,
 } from "@/lib/ai-clients";
+import { requireApiSecret } from "@/lib/api-auth";
+import { MAX_MARKDOWN_CHARS, formatCharLimit } from "@/lib/limits";
 import type { SystemPromptPresetId } from "@/lib/prompt";
 
 export async function POST(req: NextRequest) {
+  const authError = requireApiSecret(req);
+  if (authError) return authError;
+
   try {
     const {
       markdown,
@@ -29,6 +34,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Missing markdown or provider" },
         { status: 400 }
+      );
+    }
+
+    if (markdown.length > MAX_MARKDOWN_CHARS) {
+      return NextResponse.json(
+        {
+          error: `Markdown too large (${markdown.length} chars). Maximum is ${formatCharLimit(MAX_MARKDOWN_CHARS)} characters.`,
+        },
+        { status: 413 }
       );
     }
 
