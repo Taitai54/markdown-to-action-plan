@@ -32,12 +32,12 @@ export default function ApiSelector({
             onClick={() => isAvailable && onSelect(provider.id)}
             disabled={!isAvailable}
             title={!isAvailable ? `${provider.label} API key not configured` : ""}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all duration-200 ${
               isSelected
-                ? "border-blue-500 bg-blue-50 text-blue-700"
+                ? "border-blue-500 bg-blue-500/15 text-blue-300 shadow-sm shadow-blue-500/20"
                 : isAvailable
-                ? "border-gray-200 hover:border-gray-300 text-gray-700"
-                : "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"
+                ? "border-slate-600 hover:border-slate-400 text-slate-200 hover:bg-slate-700/40"
+                : "border-slate-700 bg-slate-800/20 text-slate-600 cursor-not-allowed"
             }`}
           >
             <span className="text-xl">{provider.icon}</span>

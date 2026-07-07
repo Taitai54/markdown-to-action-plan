@@ -7,6 +7,7 @@ import { marked } from "marked";
 import { saveAs } from "file-saver";
 import { MasterActionPlan, Milestone } from "@/lib/ai-clients";
 import { escapeHtml } from "@/lib/escape-html";
+import type { Components } from "react-markdown";
 
 interface ActionPlanProps {
   plan: MasterActionPlan | null;
@@ -26,9 +27,9 @@ function ensureExtension(name: string, ext: string): string {
 const supportsSavePicker = typeof window !== "undefined" && "showSaveFilePicker" in window;
 
 const PRIORITY_STYLES = {
-  high: "bg-red-100 text-red-700",
-  medium: "bg-yellow-100 text-yellow-700",
-  low: "bg-green-100 text-green-700",
+  high: "bg-red-500/20 text-red-400 border border-red-500/30",
+  medium: "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
+  low: "bg-green-500/20 text-green-400 border border-green-500/30",
 };
 
 function milestoneStorageKey(planTitle: string): string {
@@ -45,6 +46,64 @@ function loadMilestoneDone(planTitle: string): Record<number, boolean> {
   }
 }
 
+/** Inline copy button used inside code blocks */
+function CopyCodeButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback: no-op
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="absolute top-2 right-2 px-2 py-1 rounded text-[11px] font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white border border-slate-600 transition-all duration-150"
+      title="Copy code"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
+/** Custom code block renderer with Copy Code button */
+const markdownComponents: Components = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  code({ className, children, ...props }: any) {
+    const isBlock = className?.startsWith("language-") || String(children).includes("\n");
+    const codeString = String(children).replace(/\n$/, "");
+    if (!isBlock) {
+      return (
+        <code
+          className="bg-slate-700/60 text-blue-300 px-1.5 py-0.5 rounded text-[0.85em] font-mono"
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+    const lang = className?.replace("language-", "") ?? "";
+    return (
+      <div className="relative group my-4">
+        {lang && (
+          <span className="absolute top-2 left-3 text-[10px] uppercase tracking-widest text-slate-500 font-mono select-none">
+            {lang}
+          </span>
+        )}
+        <CopyCodeButton code={codeString} />
+        <pre className={`overflow-x-auto rounded-xl bg-slate-900 border border-slate-700/60 px-4 pb-4 ${lang ? "pt-7" : "pt-4"} text-sm`}>
+          <code className="text-slate-200 font-mono">{children}</code>
+        </pre>
+      </div>
+    );
+  },
+};
+
 function MilestoneCard({
   milestone,
   done,
@@ -54,11 +113,12 @@ function MilestoneCard({
   done: boolean;
   onToggle: () => void;
 }) {
-
   return (
     <div
-      className={`rounded-xl border p-4 transition-all ${
-        done ? "bg-gray-50 opacity-70 border-gray-200" : "bg-white border-gray-200"
+      className={`rounded-xl border p-4 transition-all duration-200 ${
+        done
+          ? "bg-slate-800/40 opacity-60 border-slate-700/40"
+          : "bg-slate-800/60 border-slate-700/60 backdrop-blur-md"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -66,11 +126,11 @@ function MilestoneCard({
           type="checkbox"
           checked={done}
           onChange={onToggle}
-          className="mt-1 h-4 w-4 rounded border-gray-300 accent-blue-600"
+          className="mt-1 h-4 w-4 rounded border-slate-600 accent-blue-500"
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-2">
-            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded bg-blue-100 text-blue-700">
+            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
               {milestone.category}
             </span>
             <span
@@ -79,17 +139,15 @@ function MilestoneCard({
               {milestone.priority}
             </span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3
-              className={`text-sm font-medium ${
-                done ? "line-through text-gray-400" : "text-gray-900"
-              }`}
-            >
-              {milestone.title}
-            </h3>
-          </div>
-          <p className="text-[12px] text-gray-600 mt-2">
-            <strong>Done when:</strong> {milestone.done_when}
+          <h3
+            className={`text-sm font-medium ${
+              done ? "line-through text-slate-500" : "text-slate-100"
+            }`}
+          >
+            {milestone.title}
+          </h3>
+          <p className="text-[12px] text-slate-400 mt-2">
+            <strong className="text-slate-300">Done when:</strong> {milestone.done_when}
           </p>
         </div>
       </div>
@@ -121,10 +179,7 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
     setMilestoneDone((prev) => {
       const next = { ...prev, [index]: !prev[index] };
       try {
-        localStorage.setItem(
-          milestoneStorageKey(plan.title),
-          JSON.stringify(next)
-        );
+        localStorage.setItem(milestoneStorageKey(plan.title), JSON.stringify(next));
       } catch {
         /* ignore quota errors */
       }
@@ -185,18 +240,11 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
     try {
       const html = await marked.parse(plan.implementation_document);
       const plainText = plan.implementation_document;
-
       const blob = new Blob([html], { type: "text/html" });
       const plainBlob = new Blob([plainText], { type: "text/plain" });
-
-      const data = [
-        new ClipboardItem({
-          "text/html": blob,
-          "text/plain": plainBlob,
-        }),
-      ];
-
-      await navigator.clipboard.write(data);
+      await navigator.clipboard.write([
+        new ClipboardItem({ "text/html": blob, "text/plain": plainBlob }),
+      ]);
       alert("Plan copied to clipboard as Rich Text. You can now paste (Ctrl+V) directly into Google Docs!");
     } catch (err) {
       console.error("Copy failed:", err);
@@ -236,15 +284,12 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
         </body>
         </html>
       `;
-
       const response = await fetch("/api/export/docx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ html: fullHtml, title: plan.title }),
       });
-
       if (!response.ok) throw new Error("Server failed to generate Docx");
-
       const docxBlob = await response.blob();
       const name = ensureExtension(currentDownloadName, ".docx");
       await saveBlobWithPicker(
@@ -263,28 +308,30 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <section className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6 shadow-sm">
+      {/* Plan header card */}
+      <section className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-slate-800/60 backdrop-blur-md p-6 shadow-lg shadow-blue-500/5">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.2em] text-blue-700 font-semibold">
+              <p className="text-xs uppercase tracking-[0.2em] text-blue-400 font-semibold">
                 Generated Action Plan
               </p>
-              <h2 className="text-2xl font-bold text-gray-900 leading-tight">{plan.title}</h2>
-              <p className="text-gray-700 text-sm leading-relaxed max-w-3xl">{plan.summary}</p>
+              <h2 className="text-2xl font-bold text-white leading-tight">{plan.title}</h2>
+              <p className="text-slate-300 text-sm leading-relaxed max-w-3xl">{plan.summary}</p>
             </div>
             <div className="grid grid-cols-1 gap-2 shrink-0">
-              <div className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-center">
-                <div className="text-lg font-bold text-blue-700">{safeMilestones.length}</div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-500">Milestones</div>
+              <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-center">
+                <div className="text-lg font-bold text-blue-400">{safeMilestones.length}</div>
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">Milestones</div>
               </div>
             </div>
           </div>
 
+          {/* Export buttons */}
           <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
             <button
               onClick={downloadMarkdown}
-              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors flex items-center justify-center gap-2"
+              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-slate-600 hover:bg-slate-700 text-slate-300 hover:text-white transition-all duration-150 flex items-center justify-center gap-2"
               title="Download as raw Markdown file"
             >
               <span>📄</span> Markdown
@@ -292,7 +339,7 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
             <button
               onClick={downloadWord}
               disabled={exporting}
-              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-blue-100 bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50"
               title="Download as Microsoft Word document"
             >
               <span>{exporting ? "⏳" : "📝"}</span> Word Doc
@@ -300,15 +347,16 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
             <button
               onClick={copyForGoogleDocs}
               disabled={copying}
-              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-green-100 bg-green-50 hover:bg-green-100 text-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg border border-green-500/40 bg-green-500/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50"
               title="Copy as Rich Text for Google Docs"
             >
               <span>{copying ? "⏳" : "📋"}</span> Copy for GDocs
             </button>
           </div>
 
+          {/* Save-as filename */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <label htmlFor="save-as-filename" className="text-xs font-medium text-gray-500 whitespace-nowrap">
+            <label htmlFor="save-as-filename" className="text-xs font-medium text-slate-500 whitespace-nowrap">
               Save as:
             </label>
             <input
@@ -317,30 +365,33 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
               value={downloadFilename}
               onChange={(e) => setDownloadFilename(e.target.value)}
               placeholder={defaultDownloadName}
-              className="flex-1 min-w-0 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="flex-1 min-w-0 rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               title="Filename used for Markdown and Word downloads (extension added automatically)"
             />
-            <span className="text-xs text-gray-400 self-start sm:self-auto">.md / .docx</span>
+            <span className="text-xs text-slate-600 self-start sm:self-auto">.md / .docx</span>
           </div>
         </div>
       </section>
 
+      {/* Split layout: playbook + milestones */}
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">
+        {/* Implementation playbook */}
+        <div className="rounded-xl border border-slate-700/60 bg-slate-800/60 backdrop-blur-md p-5 shadow-sm">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
             Implementation Playbook
           </h3>
-          <div className="prose prose-sm max-w-none text-gray-800 prose-headings:text-gray-900 prose-headings:font-bold prose-p:text-gray-800 prose-li:text-gray-800 prose-strong:text-gray-900 prose-a:text-blue-700 prose-code:text-blue-700 prose-code:bg-blue-50 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <div className="prose prose-sm max-w-none prose-invert prose-headings:text-white prose-headings:font-bold prose-p:text-slate-300 prose-li:text-slate-300 prose-strong:text-white prose-a:text-blue-400 prose-blockquote:border-blue-500 prose-blockquote:text-slate-400 prose-hr:border-slate-700">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
               {plan.implementation_document}
             </ReactMarkdown>
           </div>
         </div>
 
+        {/* Milestones sidebar */}
         <aside className="space-y-4 lg:sticky lg:top-4 h-fit">
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Milestones</h3>
-            <p className="text-xs text-gray-500">
+          <div className="rounded-xl border border-slate-700/60 bg-slate-800/60 backdrop-blur-md p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-200 mb-1">Milestones</h3>
+            <p className="text-xs text-slate-500">
               Track progress as you work through the plan.
             </p>
           </div>
@@ -356,7 +407,7 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-500">
+            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-800/40 p-4 text-sm text-slate-500">
               No milestones returned for this plan.
             </div>
           )}

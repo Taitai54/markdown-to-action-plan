@@ -24,7 +24,7 @@ const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
     apiKey: process.env.GEMINI_API_KEY,
     endpoint:
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
   },
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY,
