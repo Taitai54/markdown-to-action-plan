@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-// pdf-parse ships CommonJS — use require() to avoid ESM default-export issues
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+import { PDFParse } from "pdf-parse";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,9 +15,11 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const data = await pdfParse(buffer);
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    await parser.destroy();
 
-    return NextResponse.json({ text: data.text });
+    return NextResponse.json({ text: result.text });
   } catch (err) {
     console.error("PDF parse error:", err);
     return NextResponse.json({ error: "Failed to parse PDF" }, { status: 500 });
