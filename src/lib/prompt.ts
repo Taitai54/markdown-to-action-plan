@@ -1,3 +1,5 @@
+import type { MasterActionPlan } from "./ai-clients";
+
 export const SYSTEM_PROMPT = `You are an expert implementation specialist who converts raw knowledge documents into precise, executable action plans. Your output must be so specific that someone with zero prior knowledge of the tools could follow it without watching a video or reading external docs.
 
 ## Your Job
@@ -273,4 +275,53 @@ Using ONLY the knowledge retrieved below, create a structured action plan that h
 
 Retrieved knowledge:
 ${markdown}`;
+}
+
+export function buildRefineUserPrompt(
+  markdown: string,
+  previousPlan: MasterActionPlan,
+  feedback: string
+): string {
+  return `You previously generated the action plan below from the source material. The user has feedback — revise the plan to address it.
+
+<success_criteria>
+A milestone or task is genuinely specific and actionable only if it has:
+1. A concrete, real-world example or use case — not just an abstract instruction
+2. An exact UI action, command, URL, or field value — never a vague "configure X"
+3. An observable "✅ Done when:" outcome
+Check every milestone against this list before finalizing.
+</success_criteria>
+
+<scope_constraint>
+Only change what the feedback below asks you to change. Do not rewrite, reorder, or "improve" sections the feedback didn't mention — preserve them exactly as they are in the original plan.
+</scope_constraint>
+
+<examples>
+<example>
+Generic: "Set up authentication for the app."
+Specific: "In the Supabase dashboard, go to Authentication → Providers → toggle on **Email**. Copy the **Project URL** and **anon public key** from Settings → API into your \`.env.local\` as \`NEXT_PUBLIC_SUPABASE_URL\` and \`NEXT_PUBLIC_SUPABASE_ANON_KEY\`."
+</example>
+<example>
+Generic: "Configure the database connection."
+Specific: "Run \`npx prisma migrate dev --name init\` from the project root. This creates \`prisma/migrations/\` and applies the schema in \`prisma/schema.prisma\` to the database at \`DATABASE_URL\`."
+</example>
+<example>
+Generic: "Test that the feature works."
+Specific: "Run \`npm run test -- auth.spec.ts\`. **Done when:** the terminal shows \`4 passed\`."
+</example>
+</examples>
+
+<original_source>
+${markdown}
+</original_source>
+
+<original_plan>
+${JSON.stringify(previousPlan)}
+</original_plan>
+
+<user_feedback>
+${feedback}
+</user_feedback>
+
+Return the complete, revised plan as JSON in the exact same shape as the original (title, summary, implementation_document, milestones). Apply the user's feedback and the success criteria above, respecting the scope constraint.`;
 }

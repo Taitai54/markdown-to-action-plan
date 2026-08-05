@@ -1,4 +1,4 @@
-import { buildUserPrompt, getSystemPromptForPreset, DEFAULT_SYSTEM_PROMPT_PRESET_ID } from "./prompt";
+import { buildUserPrompt, buildRefineUserPrompt, getSystemPromptForPreset, DEFAULT_SYSTEM_PROMPT_PRESET_ID } from "./prompt";
 import type { SystemPromptPresetId } from "./prompt";
 
 export type Provider = "openai" | "perplexity" | "gemini" | "openrouter";
@@ -327,6 +327,7 @@ export async function generateActionPlan(
     systemPromptOverride?: string;
     systemPromptPresetId?: SystemPromptPresetId;
     modelOverride?: string;
+    refineContext?: { previousPlan: MasterActionPlan; feedback: string };
   }
 ): Promise<ActionPlanResult> {
   const config = PROVIDER_CONFIGS[provider];
@@ -337,7 +338,9 @@ export async function generateActionPlan(
   const userContent =
     options?.userPromptOverride != null && options.userPromptOverride !== ""
       ? options.userPromptOverride
-      : buildUserPrompt(markdown);
+      : options?.refineContext
+        ? buildRefineUserPrompt(markdown, options.refineContext.previousPlan, options.refineContext.feedback)
+        : buildUserPrompt(markdown);
 
   const systemContent =
     options?.systemPromptOverride != null && options.systemPromptOverride !== ""
