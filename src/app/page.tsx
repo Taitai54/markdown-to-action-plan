@@ -263,6 +263,8 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setPlan(null);
+    setRefineError(null);
+    setRefineFeedback("");
 
     const isCustomSystemPrompt =
       editableSystemPrompt !== "" &&
@@ -295,8 +297,15 @@ export default function Home() {
 
   const handleRefine = async () => {
     if (!plan || !refineFeedback.trim()) return;
+    if (!activeMarkdown) {
+      setRefineError(
+        "The source content is no longer available. Re-add your files or re-run the knowledge base search before refining."
+      );
+      return;
+    }
     setRefining(true);
     setRefineError(null);
+    setError(null);
 
     const isCustomSystemPrompt =
       editableSystemPrompt !== "" &&
@@ -831,7 +840,7 @@ export default function Home() {
               {/* Generate button */}
               <button
                 onClick={handleGenerate}
-                disabled={loading || available.length === 0 || !canGenerate}
+                disabled={loading || refining || available.length === 0 || !canGenerate}
                 className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition-all duration-200 hover:scale-[1.01] hover:shadow-xl hover:shadow-blue-500/20"
               >
                 {loading ? (
@@ -876,7 +885,7 @@ export default function Home() {
               />
               <button
                 onClick={handleRefine}
-                disabled={refining || !refineFeedback.trim()}
+                disabled={refining || loading || !refineFeedback.trim()}
                 className="w-full py-3 px-4 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition-all duration-200"
               >
                 {refining ? (
