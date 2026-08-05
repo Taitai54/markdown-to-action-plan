@@ -64,6 +64,9 @@ export default function Home() {
   const [plan, setPlan] = useState<MasterActionPlan | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refineFeedback, setRefineFeedback] = useState("");
+  const [refining, setRefining] = useState(false);
+  const [refineError, setRefineError] = useState<string | null>(null);
   const [promptExpanded] = useState(true);
   const [editablePrompt, setEditablePrompt] = useState("");
   const [userPromptDirty, setUserPromptDirty] = useState(false);
@@ -114,6 +117,15 @@ export default function Home() {
         : buildUserPrompt(activeMarkdown),
     [inputMode, kbResults, kbQuery, activeMarkdown]
   );
+  const modelOverride = useMemo(() => {
+    return provider === "openrouter"
+      ? openRouterModelPreset === "custom" ? openRouterCustomModel : openRouterModelPreset
+      : provider === "openai"
+        ? openAiModelPreset === "custom" ? openAiCustomModel : openAiModelPreset
+        : provider === "gemini"
+          ? geminiModelPreset === "custom" ? geminiCustomModel : geminiModelPreset
+          : undefined;
+  }, [provider, openRouterModelPreset, openRouterCustomModel, openAiModelPreset, openAiCustomModel, geminiModelPreset, geminiCustomModel]);
 
   // sync user prompt when content changes
   useEffect(() => {
@@ -251,18 +263,12 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setPlan(null);
+    setRefineError(null);
+    setRefineFeedback("");
 
     const isCustomSystemPrompt =
       editableSystemPrompt !== "" &&
       editableSystemPrompt !== getSystemPromptForPreset(systemPromptPresetId);
-    const modelOverride =
-      provider === "openrouter"
-        ? openRouterModelPreset === "custom" ? openRouterCustomModel : openRouterModelPreset
-        : provider === "openai"
-          ? openAiModelPreset === "custom" ? openAiCustomModel : openAiModelPreset
-          : provider === "gemini"
-            ? geminiModelPreset === "custom" ? geminiCustomModel : geminiModelPreset
-            : undefined;
 
     try {
       const res = await fetch("/api/generate", {
@@ -286,6 +292,49 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefine = async () => {
+    if (!plan || !refineFeedback.trim()) return;
+    if (!activeMarkdown) {
+      setRefineError(
+        "The source content is no longer available. Re-add your files or re-run the knowledge base search before refining."
+      );
+      return;
+    }
+    setRefining(true);
+    setRefineError(null);
+    setError(null);
+
+    const isCustomSystemPrompt =
+      editableSystemPrompt !== "" &&
+      editableSystemPrompt !== getSystemPromptForPreset(systemPromptPresetId);
+
+    try {
+      const res = await fetch("/api/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          markdown: activeMarkdown,
+          provider,
+          previousPlan: plan,
+          feedback: refineFeedback.trim(),
+          ...(isCustomSystemPrompt
+            ? { systemPromptOverride: editableSystemPrompt }
+            : { systemPromptPresetId }),
+          ...(modelOverride != null && modelOverride !== "" ? { modelOverride } : {}),
+        }),
+      });
+
+      const data = await res.json() as MasterActionPlan & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to refine");
+      setPlan(data);
+      setRefineFeedback("");
+    } catch (err) {
+      setRefineError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setRefining(false);
     }
   };
 
@@ -791,7 +840,7 @@ export default function Home() {
               {/* Generate button */}
               <button
                 onClick={handleGenerate}
-                disabled={loading || available.length === 0 || !canGenerate}
+                disabled={loading || refining || available.length === 0 || !canGenerate}
                 className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition-all duration-200 hover:scale-[1.01] hover:shadow-xl hover:shadow-blue-500/20"
               >
                 {loading ? (
@@ -818,6 +867,44 @@ export default function Home() {
           )}
 
           <ActionPlan plan={plan} />
+
+          {plan && (
+            <div className={cardCls}>
+              <label className="block text-sm font-medium text-slate-200">
+                Ask for improvements
+              </label>
+              <p className="text-xs text-slate-500">
+                Tell the AI what&apos;s wrong or too generic — it revises the plan, leaving everything else untouched.
+              </p>
+              <textarea
+                value={refineFeedback}
+                onChange={(e) => setRefineFeedback(e.target.value)}
+                rows={3}
+                className={inputCls}
+                placeholder="e.g. Milestone 3 is too generic — give me a real example with exact commands."
+              />
+              <button
+                onClick={handleRefine}
+                disabled={refining || loading || !refineFeedback.trim()}
+                className="w-full py-3 px-4 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition-all duration-200"
+              >
+                {refining ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Improving…
+                  </span>
+                ) : "Improve this plan"}
+              </button>
+              {refineError && (
+                <div className="p-4 bg-red-900/20 border border-red-700/50 rounded-xl text-red-400 text-sm">
+                  {refineError}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </main>
