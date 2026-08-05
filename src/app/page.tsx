@@ -33,25 +33,29 @@ interface KbChunk {
   docType: string;
 }
 
-const OPENROUTER_MODELS = [
+// Small curated fallback shown only if the live OpenRouter catalog fetch (below) fails —
+// the real dropdown is populated from /api/openrouter-models so it never goes stale.
+const OPENROUTER_MODELS_FALLBACK = [
   { id: "openai/gpt-4o-mini", label: "Balanced (GPT-4o mini)", hint: "Balanced quality and speed" },
   { id: "qwen/qwen-plus", label: "Qwen Plus (quality/cost)", hint: "Great quality-to-cost ratio" },
   { id: "meta-llama/llama-3.1-8b-instruct", label: "Llama 3.1 8B (low cost)", hint: "Low-cost general-purpose choice" },
-  { id: "qwen/qwen2.5-7b-instruct", label: "Qwen 2.5 7B (very low cost)", hint: "Very low cost, good for drafts" },
+  { id: "qwen/qwen-2.5-7b-instruct", label: "Qwen 2.5 7B (very low cost)", hint: "Very low cost, good for drafts" },
   { id: "mistralai/mistral-nemo", label: "Mistral Nemo (low cost)", hint: "Low-cost with strong instruction following" },
 ];
 
 const OPENAI_MODELS = [
-  { id: "gpt-4.1", label: "GPT-4.1 (best quality)", hint: "Latest GPT-4.1 — best quality for complex plans" },
-  { id: "gpt-4.1-mini", label: "GPT-4.1 mini (lower cost)", hint: "Faster and cheaper than GPT-4.1" },
-  { id: "gpt-4o", label: "GPT-4o", hint: "Previous flagship — still highly capable" },
+  { id: "gpt-5.5", label: "GPT-5.5 (best quality)", hint: "Latest flagship — best quality for complex plans" },
+  { id: "gpt-5.4-mini", label: "GPT-5.4 mini (lower cost)", hint: "Faster and cheaper than GPT-5.5" },
+  { id: "gpt-4.1", label: "GPT-4.1", hint: "Previous generation flagship — still highly capable" },
   { id: "gpt-4o-mini", label: "GPT-4o mini (low cost)", hint: "Low cost and fast responses" },
 ];
 
 const GEMINI_MODELS = [
-  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)", hint: "Latest Gemini Flash — fast, capable, and cost-effective" },
-  { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro (best quality)", hint: "Highest quality Gemini model" },
-  { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (low cost)", hint: "Lightest and cheapest Gemini option" },
+  // "-latest" aliases: Google repoints these to the current release, so the picker
+  // doesn't go stale as new Gemini generations ship.
+  { id: "gemini-flash-latest", label: "Gemini Flash (recommended)", hint: "Always the current Gemini Flash — fast, capable, and cost-effective" },
+  { id: "gemini-pro-latest", label: "Gemini Pro (best quality)", hint: "Always the current Gemini Pro — highest quality" },
+  { id: "gemini-flash-lite-latest", label: "Gemini Flash Lite (low cost)", hint: "Always the current Gemini Flash Lite — lightest and cheapest option" },
 ];
 
 const KB_PRESET_ID: SystemPromptPresetId = "knowledge-synthesis";
@@ -73,7 +77,10 @@ export default function Home() {
   const [masterPromptExpanded, setMasterPromptExpanded] = useState(false);
   const [systemPromptPresetId, setSystemPromptPresetId] = useState<SystemPromptPresetId>(DEFAULT_SYSTEM_PROMPT_PRESET_ID);
   const [editableSystemPrompt, setEditableSystemPrompt] = useState("");
-  const [openRouterModelPreset, setOpenRouterModelPreset] = useState(OPENROUTER_MODELS[0].id);
+  const [openRouterModels, setOpenRouterModels] = useState<{ id: string; label: string; hint?: string }[]>(
+    OPENROUTER_MODELS_FALLBACK
+  );
+  const [openRouterModelPreset, setOpenRouterModelPreset] = useState(OPENROUTER_MODELS_FALLBACK[0].id);
   const [openRouterCustomModel, setOpenRouterCustomModel] = useState("");
   const [openAiModelPreset, setOpenAiModelPreset] = useState(OPENAI_MODELS[0].id);
   const [openAiCustomModel, setOpenAiCustomModel] = useState("");
@@ -103,7 +110,7 @@ export default function Home() {
 
   const selectedOpenAiModel = OPENAI_MODELS.find((m) => m.id === openAiModelPreset);
   const selectedGeminiModel = GEMINI_MODELS.find((m) => m.id === geminiModelPreset);
-  const selectedOpenRouterModel = OPENROUTER_MODELS.find((m) => m.id === openRouterModelPreset);
+  const selectedOpenRouterModel = openRouterModels.find((m) => m.id === openRouterModelPreset);
 
   const concatenatedMarkdown = useMemo(() => concatenateMarkdown(files), [files]);
   const activeMarkdown = useMemo(
@@ -155,6 +162,20 @@ export default function Home() {
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // fetch the live OpenRouter model catalog; keep the curated fallback list on failure
+  useEffect(() => {
+    fetch("/api/openrouter-models")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setOpenRouterModels(data.models as { id: string; label: string; hint?: string }[]);
+        }
+      })
+      .catch(() => {
+        // keep OPENROUTER_MODELS_FALLBACK
+      });
+  }, []);
+
   // fetch Pinecone namespaces
   useEffect(() => {
     fetch("/api/knowledge-namespaces")
@@ -185,6 +206,13 @@ export default function Home() {
   const handleRemoveFile = useCallback((index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  const handleProviderSwitch = (next: Provider) => {
+    if (next === provider) return;
+    setProvider(next);
+    setError(null);
+    setRefineError(null);
+  };
 
   const handleModeSwitch = (mode: "files" | "kb") => {
     if (mode === inputMode) return;
@@ -255,7 +283,7 @@ export default function Home() {
 
     if (activeMarkdown.length > MAX_MARKDOWN_CHARS) {
       setError(
-        `Content is too large (${activeMarkdown.length} chars). Maximum is ${formatCharLimit(MAX_MARKDOWN_CHARS)} characters.`
+        `Content is too large (${activeMarkdown.length} chars). This app's configured limit is ${formatCharLimit(MAX_MARKDOWN_CHARS)} characters — a cost/latency safety cap, not the AI model's actual context limit. Raise it via the MAX_MARKDOWN_CHARS env var if your provider/model can handle more.`
       );
       return;
     }
@@ -624,7 +652,7 @@ export default function Home() {
                 </p>
                 <ApiSelector
                   selected={provider}
-                  onSelect={setProvider}
+                  onSelect={handleProviderSwitch}
                   available={available}
                 />
               </div>
@@ -634,14 +662,14 @@ export default function Home() {
                 <div className={cardCls}>
                   <label className="block text-sm font-medium text-slate-200">OpenRouter model</label>
                   <p className="text-xs text-slate-500">
-                    Choose a low-cost model preset or set a custom OpenRouter model id.
+                    Choose from OpenRouter&apos;s full live model catalog or set a custom model id.
                   </p>
                   <select
                     value={openRouterModelPreset}
                     onChange={(e) => setOpenRouterModelPreset(e.target.value)}
                     className={selectCls}
                   >
-                    {OPENROUTER_MODELS.map((m) => (
+                    {openRouterModels.map((m) => (
                       <option key={m.id} value={m.id}>{m.label}</option>
                     ))}
                     <option value="custom">Custom model id…</option>

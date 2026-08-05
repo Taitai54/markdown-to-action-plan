@@ -92,7 +92,7 @@ const SYSTEM_PROMPT_SUMMARY = `You are an expert who turns markdown into structu
 
 const SYSTEM_PROMPT_RESEARCH = `You are an expert who turns markdown into structured action plans and flags where the source is incomplete. When the source does not explain HOW to do something, add Research or Source gap notes. Do NOT invent steps. Return ONLY valid JSON with title, summary, implementation_document, milestones. Escape quotes and newlines in strings.`;
 
-const SYSTEM_PROMPT_MINIMAL = `Turn the provided markdown into a JSON action plan. Output ONLY valid JSON: title, summary, implementation_document, milestones. Escape quotes and newlines in strings. Be concise.`;
+const SYSTEM_PROMPT_MINIMAL = `Turn the provided markdown into a JSON action plan. Output ONLY valid JSON with this exact shape: title (string), summary (string), implementation_document (string, markdown), milestones (array of { title: string, category: string, priority: "high"|"medium"|"low", done_when: string }). Include at least 2 milestones. Escape quotes and newlines in strings. Be concise.`;
 
 const SYSTEM_PROMPT_GRANULAR_BUILDER = `You are an expert implementation specialist who converts raw knowledge documents into precise, executable action plans with complete, production-ready code and zero ambiguity.
 

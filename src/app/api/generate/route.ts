@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     if (markdown.length > MAX_MARKDOWN_CHARS) {
       return NextResponse.json(
         {
-          error: `Markdown too large (${markdown.length} chars). Maximum is ${formatCharLimit(MAX_MARKDOWN_CHARS)} characters.`,
+          error: `Markdown too large (${markdown.length} chars). This app's configured limit is ${formatCharLimit(MAX_MARKDOWN_CHARS)} characters — a cost/latency safety cap, not the AI model's actual context limit. Raise it via the MAX_MARKDOWN_CHARS env var if your provider/model can handle more.`,
         },
         { status: 413 }
       );

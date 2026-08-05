@@ -13,7 +13,7 @@ const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
     endpoint: "https://api.openai.com/v1/chat/completions",
-    model: "gpt-4o",
+    model: "gpt-5.5",
   },
   perplexity: {
     apiKey: process.env.PERPLEXITY_API_KEY,
@@ -24,7 +24,9 @@ const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
     apiKey: process.env.GEMINI_API_KEY,
     endpoint:
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    model: "gemini-2.5-flash",
+    // "-latest" alias: Google repoints this to the current Gemini Flash release,
+    // so this default doesn't go stale as new model generations ship.
+    model: "gemini-flash-latest",
   },
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY,
@@ -161,19 +163,43 @@ function fixInvalidJsonEscapes(str: string): string {
   return out.join("");
 }
 
+const TRUNCATED_RESPONSE_MESSAGE =
+  "The AI response was cut off before it finished generating (incomplete JSON). " +
+  "This happens when a model stops mid-response — observed with faster/cheaper models " +
+  "(e.g. Gemini Flash) on very large or highly repetitive source documents, even with no " +
+  "output-length limit reached. Try a more capable model for this document (e.g. Gemini Pro " +
+  "instead of Flash), or reduce the document size.";
+
 /**
  * Robustly parses JSON from AI responses, handling unescaped newlines,
  * invalid escape sequences, and extra text around the JSON block.
  */
 function parseRobustJson(content: string): unknown {
-  // 1. Clean markdown fences
-  let cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  // 1. Clean an outer markdown fence some models wrap the whole response in.
+  // Anchored to the start/end only — a global replace here would also strip
+  // legitimate ```bash/```python fences that are part of the actual plan
+  // content (implementation_document routinely contains code blocks), leaving
+  // a dangling unescaped newline behind and breaking JSON.parse.
+  let cleaned = content.trim();
+  cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+
+  // A response that was cut off mid-generation essentially never happens to end
+  // on '}' by coincidence — check this on the fence-stripped-but-otherwise-raw
+  // text, before any substring/repair steps below can themselves corrupt the
+  // string and produce false positives.
+  const endsProperly = cleaned.endsWith("}");
 
   // 2. Find the first '{' and last '}' to isolate the JSON object
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
-  if (start === -1 || end === -1) {
+  if (start === -1) {
     throw new Error("No JSON object found in AI response");
+  }
+  if (end === -1) {
+    // Found an opening '{' but no closing '}' anywhere — the response was cut
+    // off mid-generation (observed with faster/cheaper models, e.g. Gemini
+    // Flash, on very large or highly repetitive source documents).
+    throw new Error(TRUNCATED_RESPONSE_MESSAGE);
   }
   cleaned = cleaned.substring(start, end + 1);
 
@@ -197,6 +223,9 @@ function parseRobustJson(content: string): unknown {
         "):",
         err.message
       );
+      if (!endsProperly) {
+        throw new Error(TRUNCATED_RESPONSE_MESSAGE);
+      }
       throw new Error(`JSON parse error: ${err.message}`);
     }
   }

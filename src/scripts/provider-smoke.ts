@@ -5,7 +5,10 @@
 import { config } from "dotenv";
 import { resolve } from "path";
 
-config({ path: resolve(process.cwd(), ".env.local") });
+// override: true — a stale OS-level env var (e.g. a leftover Windows user
+// variable) would otherwise silently shadow the correct key in .env.local,
+// since dotenv defaults to never overwriting an already-set process.env value.
+config({ path: resolve(process.cwd(), ".env.local"), override: true });
 
 const FIXTURE = `# Smoke test
 
