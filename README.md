@@ -91,3 +91,20 @@ The tool uses a specialized "Tactical Playbook" system prompt that enforces:
 ---
 
 Built for developers and project managers who need to move from "What to build" to "How to build it" instantly.
+
+## **Mac Launcher**
+
+- **Added:** `start-action-plan-mac.command` — a macOS command script that installs deps (if missing), runs `npm run dev`, waits for `http://localhost:3000`, and opens it in your default browser.
+- **Added:** `scripts/create-mac-launcher.sh` — optional helper that uses `osacompile` to create an AppleScript `.app` wrapper (placed in `~/Applications`) which runs the `.command` script in Terminal.
+
+- **Quick start:** make the scripts executable and run the launcher script (or the command directly):
+
+```bash
+chmod +x start-action-plan-mac.command scripts/create-mac-launcher.sh
+./start-action-plan-mac.command
+# OR to create a clickable macOS app (requires `osacompile`):
+./scripts/create-mac-launcher.sh
+```
+
+If `osacompile` is not available, you can create an Automator or Script Editor app that runs `./start-action-plan-mac.command` in Terminal.
+
