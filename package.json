@@ -6,6 +6,10 @@
     "dev": "next dev --webpack -p 3000",
     "build": "next build",
     "start": "next start",
+    "start:headless": "bash scripts/start-headless.sh",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop ecosystem.config.js || true",
+    "pm2:restart": "pm2 restart ecosystem.config.js",
     "lint": "eslint",
     "mcp": "npx tsx src/mcp-server.ts",
     "check:llms": "npx tsx src/scripts/provider-smoke.ts"

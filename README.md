@@ -108,3 +108,58 @@ chmod +x start-action-plan-mac.command scripts/create-mac-launcher.sh
 
 If `osacompile` is not available, you can create an Automator or Script Editor app that runs `./start-action-plan-mac.command` in Terminal.
 
+## **Headless (production) run**
+
+If you want to build and run the app headless (no browser, background process), use the provided headless script.
+
+1. Make the script executable and run via npm:
+
+```bash
+chmod +x scripts/start-headless.sh
+npm run start:headless
+```
+
+2. Logs are written to `logs/headless.log` and the process PID is stored at `tmp/headless.pid`.
+
+3. To stop the headless server:
+
+```bash
+kill $(cat tmp/headless.pid)
+```
+
+This is suitable for local, headless production-style runs. For sharing or hosting, consider deploying to Vercel, Netlify, or a VPS.
+
+### Process managers (recommended for reliability)
+
+- **pm2 (cross-platform):** install globally (`npm i -g pm2`) then start the provided ecosystem file:
+
+```bash
+npm i -g pm2
+npm run pm2:start
+# save process list and configure startup
+pm2 save
+pm2 startup
+```
+
+Logs: `logs/pm2-out.log` / `logs/pm2-error.log`.
+
+- **mac launchd (native):** run `chmod +x scripts/install-launchd.sh && ./scripts/install-launchd.sh`. This writes a `~/Library/LaunchAgents/com.markdown-action-plan.headless.plist` file and loads it. Logs are under `~/Library/Logs/markdown-action-plan.*.log`.
+
+- **Windows (service):** two options:
+  - Use NSSM (recommended): download NSSM, then create a service pointing to `C:\Program Files\nodejs\node.exe` with arguments like `C:\path\to\repo\node_modules\npm\bin\npm-cli.js start:headless` (run in an elevated PowerShell/CMD).
+  - Use PM2 on Windows: install `pm2` globally and follow `pm2 save` + `pm2 startup` instructions. For a native Windows service, consider `pm2-windows-service`.
+
+Example NSSM steps (run in elevated PowerShell):
+
+```powershell
+# Download and extract NSSM, then run something like:
+nssm install MarkdownActionPlan "C:\Program Files\nodejs\node.exe" "C:\path\to\repo\node_modules\npm\bin\npm-cli.js" "run start:headless"
+nssm start MarkdownActionPlan
+```
+
+If you'd like, I can:
+- create and load the `launchd` plist for you (runs `launchctl load`) on this Mac now, or
+- add a small `pm2`-based installer script that tries to set up pm2 startup for the current OS.
+
+
+
