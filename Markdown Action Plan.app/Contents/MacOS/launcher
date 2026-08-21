@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+REPO_DIR="/Users/matthewatkinson/GitHub projects mac/markdown-to-action-plan"
+cd "$REPO_DIR"
+# open a new Terminal window and run the command script so logs are visible
+osascript <<APP
+tell application "Terminal"
+    activate
+    do script "cd \"$REPO_DIR\" && ./start-action-plan-mac.command"
+end tell
+APP

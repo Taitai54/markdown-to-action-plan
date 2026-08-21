@@ -104,6 +104,15 @@ chmod +x start-action-plan-mac.command scripts/create-mac-launcher.sh
 ./start-action-plan-mac.command
 # OR to create a clickable macOS app (requires `osacompile`):
 ./scripts/create-mac-launcher.sh
+
+# OR create a simple clickable `.app` bundle without Xcode/tools:
+
+```bash
+chmod +x scripts/create-mac-app-bundle.sh
+./scripts/create-mac-app-bundle.sh
+# then double-click "Markdown Action Plan.app" in Finder or run:
+open "Markdown Action Plan.app"
+```
 ```
 
 If `osacompile` is not available, you can create an Automator or Script Editor app that runs `./start-action-plan-mac.command` in Terminal.
