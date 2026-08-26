@@ -1,7 +1,7 @@
 import { buildUserPrompt, buildRefineUserPrompt, getSystemPromptForPreset, DEFAULT_SYSTEM_PROMPT_PRESET_ID } from "./prompt";
 import type { SystemPromptPresetId } from "./prompt";
 
-export type Provider = "openai" | "perplexity" | "gemini" | "openrouter";
+export type Provider = "openai" | "perplexity" | "gemini" | "openrouter" | "ollama" | "xai";
 
 interface ProviderConfig {
   apiKey: string | undefined;
@@ -24,14 +24,22 @@ const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
     apiKey: process.env.GEMINI_API_KEY,
     endpoint:
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    // "-latest" alias: Google repoints this to the current Gemini Flash release,
-    // so this default doesn't go stale as new model generations ship.
     model: "gemini-flash-latest",
   },
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY,
     endpoint: "https://openrouter.ai/api/v1/chat/completions",
     model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+  },
+  ollama: {
+    apiKey: "ollama",
+    endpoint: "http://localhost:11434/v1/chat/completions",
+    model: "gpt-oss:20b",
+  },
+  xai: {
+    apiKey: process.env.XAI_API_KEY,
+    endpoint: "https://api.x.ai/v1/chat/completions",
+    model: "grok-beta",
   },
 };
 
@@ -57,7 +65,7 @@ export function getAvailableProviders(): Provider[] {
 
 export function getConfiguredProviders(): Provider[] {
   return (Object.entries(PROVIDER_CONFIGS) as [Provider, ProviderConfig][])
-    .filter(([, config]) => !!config.apiKey)
+    .filter(([name, config]) => name === "ollama" || !!config.apiKey)
     .map(([name]) => name);
 }
 
@@ -345,7 +353,7 @@ const LLM_TIMEOUT_MS = Number.parseInt(
 
 /** Providers that accept OpenAI-style `response_format: json_object`. */
 function supportsJsonObjectMode(provider: Provider): boolean {
-  return provider === "openai" || provider === "openrouter" || provider === "gemini";
+  return provider === "openai" || provider === "openrouter" || provider === "gemini" || provider === "xai" || provider === "ollama";
 }
 
 export async function generateActionPlan(
@@ -392,12 +400,16 @@ export async function generateActionPlan(
     body.response_format = { type: "json_object" };
   }
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (provider !== "ollama") {
+    headers.Authorization = `Bearer ${config.apiKey}`;
+  }
+
   const response = await fetch(config.endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });

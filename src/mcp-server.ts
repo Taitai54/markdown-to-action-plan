@@ -44,7 +44,7 @@ server.tool(
   {
     markdown: z.string().describe("The markdown content to analyze"),
     provider: z
-      .enum(["openai", "perplexity", "gemini", "openrouter"])
+      .enum(["openai", "perplexity", "gemini", "openrouter", "ollama", "xai"])
       .optional()
       .describe(
         "AI provider to use. Defaults to first available if not specified."
@@ -82,7 +82,7 @@ server.tool(
         content: [
           {
             type: "text",
-            text: "Error: No AI providers configured. Set OPENAI_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY.",
+            text: "Error: No AI providers configured. Set OPENAI_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, or XAI_API_KEY, or ensure Ollama is running locally.",
           },
         ],
         isError: true,

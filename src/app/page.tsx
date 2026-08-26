@@ -58,6 +58,17 @@ const GEMINI_MODELS = [
   { id: "gemini-flash-lite-latest", label: "Gemini Flash Lite (low cost)", hint: "Always the current Gemini Flash Lite — lightest and cheapest option" },
 ];
 
+const OLLAMA_MODELS = [
+  { id: "gpt-oss:20b", label: "GPT-OSS 20B", hint: "Strong reasoning with thinking mode — good default" },
+  { id: "gpt-oss:120b", label: "GPT-OSS 120B", hint: "Massive model — highest quality, slower" },
+  { id: "gemma4:latest", label: "Gemma 4 Latest", hint: "Google's latest Gemma — compact and capable" },
+];
+
+const XAI_MODELS = [
+  { id: "grok-beta", label: "Grok Beta", hint: "xAI's conversational model with real-time knowledge" },
+  { id: "grok-2-latest", label: "Grok 2 Latest", hint: "Latest Grok 2 release — highest capability" },
+];
+
 const KB_PRESET_ID: SystemPromptPresetId = "knowledge-synthesis";
 
 export default function Home() {
@@ -86,6 +97,10 @@ export default function Home() {
   const [openAiCustomModel, setOpenAiCustomModel] = useState("");
   const [geminiModelPreset, setGeminiModelPreset] = useState(GEMINI_MODELS[0].id);
   const [geminiCustomModel, setGeminiCustomModel] = useState("");
+  const [ollamaModelPreset, setOllamaModelPreset] = useState(OLLAMA_MODELS[0].id);
+  const [ollamaCustomModel, setOllamaCustomModel] = useState("");
+  const [xaiModelPreset, setXaiModelPreset] = useState(XAI_MODELS[0].id);
+  const [xaiCustomModel, setXaiCustomModel] = useState("");
 
   // YouTube ingestion
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -111,6 +126,7 @@ export default function Home() {
   const selectedOpenAiModel = OPENAI_MODELS.find((m) => m.id === openAiModelPreset);
   const selectedGeminiModel = GEMINI_MODELS.find((m) => m.id === geminiModelPreset);
   const selectedOpenRouterModel = openRouterModels.find((m) => m.id === openRouterModelPreset);
+  const selectedXaiModel = XAI_MODELS.find((m) => m.id === xaiModelPreset);
 
   const concatenatedMarkdown = useMemo(() => concatenateMarkdown(files), [files]);
   const activeMarkdown = useMemo(
@@ -131,8 +147,12 @@ export default function Home() {
         ? openAiModelPreset === "custom" ? openAiCustomModel : openAiModelPreset
         : provider === "gemini"
           ? geminiModelPreset === "custom" ? geminiCustomModel : geminiModelPreset
-          : undefined;
-  }, [provider, openRouterModelPreset, openRouterCustomModel, openAiModelPreset, openAiCustomModel, geminiModelPreset, geminiCustomModel]);
+          : provider === "ollama"
+            ? ollamaModelPreset === "custom" ? ollamaCustomModel : ollamaModelPreset
+            : provider === "xai"
+              ? xaiModelPreset === "custom" ? xaiCustomModel : xaiModelPreset
+              : undefined;
+  }, [provider, openRouterModelPreset, openRouterCustomModel, openAiModelPreset, openAiCustomModel, geminiModelPreset, geminiCustomModel, ollamaModelPreset, ollamaCustomModel, xaiModelPreset, xaiCustomModel]);
 
   // sync user prompt when content changes
   useEffect(() => {
@@ -745,6 +765,64 @@ export default function Home() {
                   )}
                   {geminiModelPreset !== "custom" && selectedGeminiModel?.hint && (
                     <p className="text-xs text-slate-500">{selectedGeminiModel.hint}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Ollama model */}
+              {provider === "ollama" && (
+                <div className={cardCls}>
+                  <label className="block text-sm font-medium text-slate-200">Ollama model</label>
+                  <p className="text-xs text-slate-500">Choose a preset or enter any Ollama model ID. Requires Ollama running locally.</p>
+                  <select
+                    value={ollamaModelPreset}
+                    onChange={(e) => setOllamaModelPreset(e.target.value)}
+                    className={selectCls}
+                  >
+                    {OLLAMA_MODELS.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                    <option value="custom">Custom model id…</option>
+                  </select>
+                  {ollamaModelPreset === "custom" && (
+                    <input
+                      type="text"
+                      value={ollamaCustomModel}
+                      onChange={(e) => setOllamaCustomModel(e.target.value)}
+                      placeholder="e.g. llama3.2, mistral, qwen2.5:7b"
+                      className={inputCls}
+                    />
+                  )}
+                  <p className="text-xs text-slate-500">Make sure `ollama serve` is running on http://localhost:11434</p>
+                </div>
+              )}
+
+              {/* xAI / Grok model */}
+              {provider === "xai" && (
+                <div className={cardCls}>
+                  <label className="block text-sm font-medium text-slate-200">Grok model</label>
+                  <p className="text-xs text-slate-500">Choose a preset or enter any xAI model ID.</p>
+                  <select
+                    value={xaiModelPreset}
+                    onChange={(e) => setXaiModelPreset(e.target.value)}
+                    className={selectCls}
+                  >
+                    {XAI_MODELS.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                    <option value="custom">Custom model id…</option>
+                  </select>
+                  {xaiModelPreset === "custom" && (
+                    <input
+                      type="text"
+                      value={xaiCustomModel}
+                      onChange={(e) => setXaiCustomModel(e.target.value)}
+                      placeholder="e.g. grok-beta, grok-2-latest"
+                      className={inputCls}
+                    />
+                  )}
+                  {xaiModelPreset !== "custom" && selectedXaiModel?.hint && (
+                    <p className="text-xs text-slate-500">{selectedXaiModel.hint}</p>
                   )}
                 </div>
               )}
