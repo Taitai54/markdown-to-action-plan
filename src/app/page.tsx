@@ -59,11 +59,9 @@ const GEMINI_MODELS = [
 ];
 
 const OLLAMA_MODELS = [
-  { id: "llama3.2", label: "Llama 3.2", hint: "Latest Llama — good general-purpose local model" },
-  { id: "llama3.1", label: "Llama 3.1", hint: "Previous generation Llama — still strong" },
-  { id: "mistral", label: "Mistral", hint: "Mistral 7B — fast and efficient" },
-  { id: "qwen2.5:7b", label: "Qwen 2.5 7B", hint: "Strong open model for its size" },
-  { id: "phi3", label: "Phi 3", hint: "Microsoft's compact model — good for smaller contexts" },
+  { id: "gpt-oss:20b", label: "GPT-OSS 20B", hint: "Strong reasoning with thinking mode — good default" },
+  { id: "gpt-oss:120b", label: "GPT-OSS 120B", hint: "Massive model — highest quality, slower" },
+  { id: "gemma4:latest", label: "Gemma 4 Latest", hint: "Google's latest Gemma — compact and capable" },
 ];
 
 const XAI_MODELS = [

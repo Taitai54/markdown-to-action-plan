@@ -34,7 +34,7 @@ const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
   ollama: {
     apiKey: "ollama",
     endpoint: "http://localhost:11434/v1/chat/completions",
-    model: "llama3.2",
+    model: "gpt-oss:20b",
   },
   xai: {
     apiKey: process.env.XAI_API_KEY,
