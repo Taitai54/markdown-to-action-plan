@@ -8,7 +8,7 @@ Unlike standard AI summaries, this tool focuses on **tactical execution**—prov
 
 - **Unified Master Plan:** Consolidates multiple source files into one logical, step-by-step implementation document.
 - **Tactical & Atomic:** Every action is described in terms of specific UI interactions (buttons, menus, URLs) and expected outcomes.
-- **Multi-Provider Support:** Switch between **OpenAI (GPT-4o / GPT-4o mini)**, **Perplexity (Sonar)**, **Gemini 2.0 Flash**, and **OpenRouter** (GPT-4o mini, Qwen, Llama, Mistral presets).
+- **Multi-Provider Support:** Switch between **OpenAI (GPT-5.5 / GPT-4o mini)**, **Perplexity (Sonar)**, **Gemini 2.0 Flash**, **OpenRouter** (full live catalog), **Ollama** (local models), and **Grok / xAI**.
 - **Milestone Tracking:** High-level milestones with explicit "✅ Done when" criteria to track your progress.
 - **Flexible Export Options:**
   - **Download .md:** Full raw markdown for your local notes.
@@ -42,7 +42,10 @@ OPENAI_API_KEY=your_key
 PERPLEXITY_API_KEY=your_key
 GEMINI_API_KEY=your_key
 OPENROUTER_API_KEY=your_key
+XAI_API_KEY=your_key
 ```
+
+**Ollama (local):** no API key required. Make sure Ollama is running locally (`ollama serve`) and you have pulled the model you want to use (e.g. `ollama pull llama3.2`). Default endpoint: `http://localhost:11434/v1/chat/completions`.
 
 ### 4. Running the Web App
 
