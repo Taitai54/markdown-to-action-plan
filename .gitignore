@@ -41,3 +41,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local browser profile - NEVER commit (contains cookies/login data)
+chrome_profile_notebooklm/
+
+# scratch fixtures
+tmp/

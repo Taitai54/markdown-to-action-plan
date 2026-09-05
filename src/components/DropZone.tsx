@@ -7,6 +7,8 @@ interface UploadedFile {
   name: string;
   size: number;
   content: string;
+  sourceType?: string;
+  sourceUrl?: string;
   lastModified?: number;
 }
 
@@ -42,6 +44,7 @@ export default function DropZone({ onFilesAdded }: DropZoneProps) {
                   name: file.name,
                   size: file.size,
                   content: data.text as string,
+                  sourceType: "PDF",
                   lastModified: file.lastModified,
                 };
               } catch {

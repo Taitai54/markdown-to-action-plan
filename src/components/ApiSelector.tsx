@@ -13,6 +13,8 @@ const PROVIDERS: { id: Provider; label: string; icon: string }[] = [
   { id: "perplexity", label: "Perplexity", icon: "🔍" },
   { id: "gemini", label: "Gemini", icon: "✨" },
   { id: "openrouter", label: "OpenRouter", icon: "🌐" },
+  { id: "groq", label: "Groq", icon: "⚡" },
+  { id: "ollama", label: "Ollama", icon: "🖥️" },
 ];
 
 export default function ApiSelector({

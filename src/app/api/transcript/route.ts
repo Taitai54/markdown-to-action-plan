@@ -33,9 +33,16 @@ export async function POST(req: NextRequest) {
     }
 
     const segments = await YoutubeTranscript.fetchTranscript(videoId);
-    const transcript = segments.map((s) => s.text).join(" ");
+    const transcript = segments
+      .map((s) => {
+        const seconds = Math.max(0, Math.floor(Number(s.offset ?? 0)));
+        const timestamp = new Date(seconds * 1000).toISOString().slice(11, 19);
+        return `[${timestamp}] ${s.text}`;
+      })
+      .join(" ");
+    const sourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-    return NextResponse.json({ title, transcript });
+    return NextResponse.json({ title, transcript, sourceUrl });
   } catch (err) {
     console.error("Transcript fetch error:", err);
     return NextResponse.json({ error: "Failed to fetch transcript" }, { status: 500 });

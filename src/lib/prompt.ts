@@ -99,6 +99,17 @@ const SYSTEM_PROMPT_GRANULAR_BUILDER = `You are an expert implementation special
 ## Your Job
 Transform the provided markdown source material into a single, unified master action plan structured as a tactical playbook — not a strategy summary. Every step must be immediately actionable, every code block must be complete and copy-pasteable, and every use case must be concrete and real-world.
 
+Before writing the playbook, identify the source's highest-value knowledge units and treat each according to its type: concept, principle, tip, procedure, code recipe, example, or unresolved source gap. Do not force conceptual knowledge into procedural tasks.
+
+For every important concept or principle, explain:
+- **Meaning:** the idea in plain language and the problem it solves
+- **Use conditions:** when to use it, when not to use it, and the trigger or decision rule
+- **Application:** the smallest concrete action a reader can take
+- **Example:** a realistic scenario with context, inputs, actions, and expected outcome
+- **Verification:** how the reader can tell whether the idea was understood or worked
+
+For every tip, include the behavior, context, frequency, concrete example, and observable result. For procedures and code recipes, keep the exact implementation detail requirements below. Label content as **Source-backed**, **Synthesis**, **Assumption**, or **Research needed** whenever the distinction matters. Never invent source details to make an example appear more specific.
+
 ## Critical Rules
 
 ### 1. No Placeholders — Ever
@@ -172,6 +183,22 @@ Return ONLY a valid JSON object. Escape all double-quotes in string values as \\
 
 ---
 
+For conceptual or mixed sources, begin the document with these sections before the implementation phases:
+
+## What this is
+[A concise orientation and the source's central problem or thesis]
+
+## Core concepts
+[Definitions, relationships, contrasts, and prerequisites]
+
+## Principles and decision rules
+[Each important principle with meaning, use conditions, action, example, and verification]
+
+## Worked examples
+[At least one realistic example for each major idea, including expected outcomes]
+
+Then continue with the phased implementation playbook, followed by verification, troubleshooting, and source gaps. Do not add these sections when the source is purely procedural and they would only repeat the same information.
+
 ## What NOT To Do
 - Do NOT write generic advice — describe specific screens, fields, and values
 - Do NOT use passive language — use direct commands: click, paste, select, type
@@ -191,8 +218,12 @@ const SYSTEM_PROMPT_KNOWLEDGE_SYNTHESIS = `You are a knowledge synthesis special
 ### 1. Actions Over Information
 Every step must describe what to DO, not what the knowledge says. Replace "The source mentions X" with "Do X: [specific steps with exact UI paths, commands, or values]."
 
+Before drafting actions, classify the retrieved knowledge into concepts, principles, tips, procedures, code recipes, examples, and source gaps. For every important concept or principle, include its plain-language meaning, the problem it solves, when to use it, when not to use it, a decision rule or trigger, the smallest practical action, a realistic example, and a verification method. For tips, include the behavior, context, frequency, example, and observable result. Do not force conceptual knowledge into procedural tasks.
+
 ### 2. Only Use Retrieved Content
 Do not invent steps, tools, or advice not present in the retrieved chunks. If a step is implied but not detailed, flag it: "⚠️ Source gap: Exact steps not found in retrieved knowledge."
+
+Label important content as **Source-backed**, **Synthesis**, **Assumption**, or **Research needed** when the distinction matters. Preserve the retrieved source title, section, source identifier, and relevance context close to the claim when available. If the chunks disagree or do not provide enough context, show the uncertainty and recommend a focused follow-up search rather than silently merging or inventing an answer.
 
 ### 3. Atomic Steps
 Each action must be specific enough to execute without guesswork: exact button names, URLs, commands, field labels, or configuration values. Never write "configure X" without saying where and what to set.
@@ -263,7 +294,7 @@ export function getSystemPromptForPreset(id: SystemPromptPresetId): string {
 }
 
 export function buildUserPrompt(markdown: string): string {
-  return `Analyze the following markdown content and create a structured action plan so that a reader can execute every step without watching videos or reading external docs. Include concrete use-case examples and copy-pasteable commands where the source supports it.
+  return `Analyze the following markdown content and create a practical knowledge-to-action playbook. First identify whether each important item is a concept, principle, tip, procedure, code recipe, example, or source gap. Explain the mental model before asking the reader to act, and for every major idea include when to use it, a realistic example, a concrete application, and a way to verify the result. The reader should be able to understand and apply the source without watching videos or reading external docs. Preserve source-backed details, label synthesis and assumptions, and include complete copy-pasteable commands or code where the source supports it.
 
 ${markdown}`;
 }
@@ -271,7 +302,7 @@ ${markdown}`;
 export function buildKbUserPrompt(query: string, markdown: string): string {
   return `My goal is: "${query}"
 
-Using ONLY the knowledge retrieved below, create a structured action plan that helps me achieve this goal. Every step must be specific and immediately doable — not generic advice. Where the knowledge gives a concrete number, threshold, tool, or decision rule, include it exactly. Where the knowledge gives only a principle, translate it into the most specific action you can derive: a decision to make, a thing to set up, a number to target, or a habit to implement with a frequency and measurable outcome.
+Using ONLY the knowledge retrieved below, create a practical knowledge-to-action playbook that helps me achieve this goal. First classify the important items as concepts, principles, tips, procedures, code recipes, examples, or source gaps. Explain the mental model before the actions. For every major idea, include when to use it, when not to use it, a realistic example, a concrete application, and a way to verify the result. Where the knowledge gives a concrete number, threshold, tool, or decision rule, include it exactly. Where it gives only a principle, translate it into the most specific action you can derive without inventing details. Label source-backed content, synthesis, assumptions, and research gaps, and preserve source metadata where available.
 
 Retrieved knowledge:
 ${markdown}`;

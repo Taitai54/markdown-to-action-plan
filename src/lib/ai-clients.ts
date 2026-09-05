@@ -1,7 +1,7 @@
 import { buildUserPrompt, buildRefineUserPrompt, getSystemPromptForPreset, DEFAULT_SYSTEM_PROMPT_PRESET_ID } from "./prompt";
 import type { SystemPromptPresetId } from "./prompt";
 
-export type Provider = "openai" | "perplexity" | "gemini" | "openrouter";
+export type Provider = "openai" | "perplexity" | "gemini" | "openrouter" | "groq" | "ollama";
 
 interface ProviderConfig {
   apiKey: string | undefined;
@@ -33,6 +33,16 @@ const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
     endpoint: "https://openrouter.ai/api/v1/chat/completions",
     model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
   },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY,
+    endpoint: "https://api.groq.com/openai/v1/chat/completions",
+    model: process.env.GROQ_MODEL || "openai/gpt-oss-20b",
+  },
+  ollama: {
+    apiKey: process.env.OLLAMA_API_KEY || "local-ollama",
+    endpoint: `${process.env.OLLAMA_BASE_URL || "http://localhost:11434"}/api/chat`,
+    model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
+  },
 };
 
 export interface Milestone {
@@ -57,7 +67,7 @@ export function getAvailableProviders(): Provider[] {
 
 export function getConfiguredProviders(): Provider[] {
   return (Object.entries(PROVIDER_CONFIGS) as [Provider, ProviderConfig][])
-    .filter(([, config]) => !!config.apiKey)
+    .filter(([name, config]) => name === "ollama" || !!config.apiKey)
     .map(([name]) => name);
 }
 
@@ -345,7 +355,7 @@ const LLM_TIMEOUT_MS = Number.parseInt(
 
 /** Providers that accept OpenAI-style `response_format: json_object`. */
 function supportsJsonObjectMode(provider: Provider): boolean {
-  return provider === "openai" || provider === "openrouter" || provider === "gemini";
+  return provider === "openai" || provider === "openrouter" || provider === "gemini" || provider === "groq";
 }
 
 export async function generateActionPlan(
@@ -360,7 +370,7 @@ export async function generateActionPlan(
   }
 ): Promise<ActionPlanResult> {
   const config = PROVIDER_CONFIGS[provider];
-  if (!config.apiKey) {
+  if (provider !== "ollama" && !config.apiKey) {
     throw new Error(`API key not configured for ${provider}`);
   }
 
@@ -388,16 +398,24 @@ export async function generateActionPlan(
     ],
     temperature: 0.3,
   };
-  if (supportsJsonObjectMode(provider)) {
+
+  if (provider === "ollama") {
+    body.stream = false;
+    body.format = "json";
+  } else if (supportsJsonObjectMode(provider)) {
     body.response_format = { type: "json_object" };
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (provider !== "ollama" && config.apiKey) {
+    headers.Authorization = `Bearer ${config.apiKey}`;
   }
 
   const response = await fetch(config.endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
@@ -408,7 +426,10 @@ export async function generateActionPlan(
   }
 
   const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
+  const content =
+    provider === "ollama"
+      ? data.message?.content
+      : data.choices?.[0]?.message?.content;
   if (!content) {
     throw new Error(`No content in ${provider} response`);
   }

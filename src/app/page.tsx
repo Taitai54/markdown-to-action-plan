@@ -15,12 +15,15 @@ import {
 } from "@/lib/prompt";
 import type { SystemPromptPresetId } from "@/lib/prompt";
 import { concatenateMarkdown } from "@/lib/markdown-parser";
+import { DEFAULT_CHUNK_CHARS, splitMarkdownIntoChunks } from "@/lib/chunker";
 import { MAX_MARKDOWN_CHARS, formatCharLimit } from "@/lib/limits";
 
 interface UploadedFile {
   name: string;
   size: number;
   content: string;
+  sourceType?: string;
+  sourceUrl?: string;
   lastModified?: number;
 }
 
@@ -58,6 +61,19 @@ const GEMINI_MODELS = [
   { id: "gemini-flash-lite-latest", label: "Gemini Flash Lite (low cost)", hint: "Always the current Gemini Flash Lite — lightest and cheapest option" },
 ];
 
+const GROQ_MODELS = [
+  { id: "openai/gpt-oss-20b", label: "OpenAI GPT-OSS 20B (verified)", hint: "Confirmed working on this Groq key" },
+  { id: "openai/gpt-oss-120b", label: "OpenAI GPT-OSS 120B", hint: "Higher-capability Groq option" },
+  { id: "qwen/qwen3.6-27b", label: "Qwen 3.6 27B", hint: "Strong general-purpose local-leaning model" },
+  { id: "groq/compound", label: "Groq Compound", hint: "Optimized for tool use and multi-step tasks" },
+];
+
+const OLLAMA_MODELS_FALLBACK = [
+  { id: "gpt-oss:20b", label: "GPT-OSS 20B (local)", hint: "Strong reasoning with thinking mode — good default" },
+  { id: "gpt-oss:120b", label: "GPT-OSS 120B (local)", hint: "Massive model — highest quality, slower" },
+  { id: "gemma4:latest", label: "Gemma 4 Latest (local)", hint: "Google's latest Gemma — compact and capable" },
+];
+
 const KB_PRESET_ID: SystemPromptPresetId = "knowledge-synthesis";
 
 export default function Home() {
@@ -86,6 +102,13 @@ export default function Home() {
   const [openAiCustomModel, setOpenAiCustomModel] = useState("");
   const [geminiModelPreset, setGeminiModelPreset] = useState(GEMINI_MODELS[0].id);
   const [geminiCustomModel, setGeminiCustomModel] = useState("");
+  const [groqModelPreset, setGroqModelPreset] = useState(GROQ_MODELS[0].id);
+  const [groqCustomModel, setGroqCustomModel] = useState("");
+  const [ollamaModels, setOllamaModels] = useState<{ id: string; label: string; hint?: string }[]>(OLLAMA_MODELS_FALLBACK);
+  const [ollamaModelPreset, setOllamaModelPreset] = useState(OLLAMA_MODELS_FALLBACK[0].id);
+  const [ollamaCustomModel, setOllamaCustomModel] = useState("");
+  const [chunkSize, setChunkSize] = useState(DEFAULT_CHUNK_CHARS);
+  const [selectedChunkIndex, setSelectedChunkIndex] = useState(0);
 
   // YouTube ingestion
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -110,19 +133,26 @@ export default function Home() {
 
   const selectedOpenAiModel = OPENAI_MODELS.find((m) => m.id === openAiModelPreset);
   const selectedGeminiModel = GEMINI_MODELS.find((m) => m.id === geminiModelPreset);
+  const selectedGroqModel = GROQ_MODELS.find((m) => m.id === groqModelPreset);
   const selectedOpenRouterModel = openRouterModels.find((m) => m.id === openRouterModelPreset);
+  const selectedOllamaModel = ollamaModels.find((m) => m.id === ollamaModelPreset);
 
   const concatenatedMarkdown = useMemo(() => concatenateMarkdown(files), [files]);
   const activeMarkdown = useMemo(
     () => (inputMode === "kb" ? (kbResults ?? "") : concatenatedMarkdown),
     [inputMode, kbResults, concatenatedMarkdown]
   );
+  const sourceChunks = useMemo(
+    () => splitMarkdownIntoChunks(activeMarkdown, chunkSize),
+    [activeMarkdown, chunkSize]
+  );
+  const selectedMarkdown = sourceChunks[selectedChunkIndex]?.content ?? activeMarkdown;
   const defaultUserPrompt = useMemo(
     () =>
       inputMode === "kb" && kbResults
         ? buildKbUserPrompt(kbQuery, kbResults)
-        : buildUserPrompt(activeMarkdown),
-    [inputMode, kbResults, kbQuery, activeMarkdown]
+        : buildUserPrompt(selectedMarkdown),
+      [inputMode, kbResults, kbQuery, selectedMarkdown]
   );
   const modelOverride = useMemo(() => {
     return provider === "openrouter"
@@ -131,8 +161,12 @@ export default function Home() {
         ? openAiModelPreset === "custom" ? openAiCustomModel : openAiModelPreset
         : provider === "gemini"
           ? geminiModelPreset === "custom" ? geminiCustomModel : geminiModelPreset
-          : undefined;
-  }, [provider, openRouterModelPreset, openRouterCustomModel, openAiModelPreset, openAiCustomModel, geminiModelPreset, geminiCustomModel]);
+          : provider === "groq"
+            ? groqModelPreset === "custom" ? groqCustomModel : groqModelPreset
+            : provider === "ollama"
+              ? ollamaModelPreset === "custom" ? ollamaCustomModel : ollamaModelPreset
+              : undefined;
+  }, [provider, openRouterModelPreset, openRouterCustomModel, openAiModelPreset, openAiCustomModel, geminiModelPreset, geminiCustomModel, groqModelPreset, groqCustomModel, ollamaModelPreset, ollamaCustomModel]);
 
   // sync user prompt when content changes
   useEffect(() => {
@@ -140,14 +174,18 @@ export default function Home() {
     if (hasContent && !userPromptDirty) {
       setEditablePrompt(defaultUserPrompt);
     }
-  }, [defaultUserPrompt, files.length, userPromptDirty, inputMode, kbResults]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [defaultUserPrompt, files.length, userPromptDirty, inputMode, kbResults]);
+
+  useEffect(() => {
+    if (selectedChunkIndex >= sourceChunks.length) setSelectedChunkIndex(0);
+  }, [selectedChunkIndex, sourceChunks.length]);
 
   // lazy-load system prompt text
   useEffect(() => {
     if (masterPromptExpanded && editableSystemPrompt === "") {
       setEditableSystemPrompt(getSystemPromptForPreset(systemPromptPresetId));
     }
-  }, [masterPromptExpanded, systemPromptPresetId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [masterPromptExpanded, systemPromptPresetId, editableSystemPrompt]);
 
   // fetch configured providers
   useEffect(() => {
@@ -174,7 +212,21 @@ export default function Home() {
       .catch(() => {
         // keep OPENROUTER_MODELS_FALLBACK
       });
-  }, []);
+
+    fetch("/api/ollama-models")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setOllamaModels(data.models as { id: string; label: string; hint?: string }[]);
+          if (!data.models.some((m: { id: string }) => m.id === ollamaModelPreset)) {
+            setOllamaModelPreset(data.models[0].id);
+          }
+        }
+      })
+      .catch(() => {
+        // keep OLLAMA_MODELS_FALLBACK
+      });
+  }, [ollamaModelPreset]);
 
   // fetch Pinecone namespaces
   useEffect(() => {
@@ -192,7 +244,7 @@ export default function Home() {
         }
       })
       .catch(() => setKbConfigured(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- handlers ---
   const handleFilesAdded = useCallback((newFiles: UploadedFile[]) => {
@@ -260,13 +312,15 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: youtubeUrl.trim() }),
       });
-      const data = await res.json() as { title?: string; transcript?: string; error?: string };
+      const data = await res.json() as { title?: string; transcript?: string; sourceUrl?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch transcript");
       handleFilesAdded([
         {
           name: `YouTube: ${data.title ?? "Video"}`,
           size: (data.transcript ?? "").length,
           content: data.transcript ?? "",
+          sourceType: "YouTube transcript",
+          sourceUrl: data.sourceUrl ?? youtubeUrl.trim(),
         },
       ]);
       setYoutubeUrl("");
@@ -281,9 +335,9 @@ export default function Home() {
     if (inputMode === "files" && files.length === 0) return;
     if (inputMode === "kb" && !kbResults) return;
 
-    if (activeMarkdown.length > MAX_MARKDOWN_CHARS) {
+    if (selectedMarkdown.length > MAX_MARKDOWN_CHARS) {
       setError(
-        `Content is too large (${activeMarkdown.length} chars). This app's configured limit is ${formatCharLimit(MAX_MARKDOWN_CHARS)} characters — a cost/latency safety cap, not the AI model's actual context limit. Raise it via the MAX_MARKDOWN_CHARS env var if your provider/model can handle more.`
+        `Selected content is too large (${selectedMarkdown.length} chars). Choose a smaller chunk or raise the configured limit to ${formatCharLimit(MAX_MARKDOWN_CHARS)}.`
       );
       return;
     }
@@ -303,7 +357,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          markdown: activeMarkdown,
+          markdown: selectedMarkdown,
           provider,
           ...(promptExpanded ? { userPromptOverride: editablePrompt } : {}),
           ...(isCustomSystemPrompt
@@ -344,7 +398,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          markdown: activeMarkdown,
+          markdown: selectedMarkdown,
           provider,
           previousPlan: plan,
           feedback: refineFeedback.trim(),
@@ -472,12 +526,92 @@ export default function Home() {
                   <FileList files={files} onRemove={handleRemoveFile} />
                 </div>
               )}
+
+              {sourceChunks.length > 1 && (
+                <div className={`${cardCls} border-amber-500/40 bg-amber-500/5`}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-200">
+                        Large source detected
+                      </label>
+                      <p className="text-xs text-slate-500 mt-1">
+                        This source is split at headings and paragraph boundaries so it fits more reliably in the selected model&apos;s context. Generate one section at a time.
+                      </p>
+                    </div>
+                    <label className="text-xs text-slate-400 whitespace-nowrap">
+                      Chunk size
+                      <select
+                        value={chunkSize}
+                        onChange={(e) => {
+                          setChunkSize(Number(e.target.value));
+                          setSelectedChunkIndex(0);
+                          setUserPromptDirty(false);
+                        }}
+                        className="ml-2 rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
+                      >
+                        <option value={60000}>60k characters</option>
+                        <option value={DEFAULT_CHUNK_CHARS}>120k characters</option>
+                        <option value={240000}>240k characters</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="block text-sm font-medium text-slate-200 mt-3">
+                    Section to generate
+                    <select
+                      value={selectedChunkIndex}
+                      onChange={(e) => {
+                        setSelectedChunkIndex(Number(e.target.value));
+                        setUserPromptDirty(false);
+                        setPlan(null);
+                        setError(null);
+                      }}
+                      className={selectCls + " mt-1"}
+                    >
+                      {sourceChunks.map((chunk) => (
+                        <option key={chunk.index} value={chunk.index}>
+                          {chunk.index + 1}. {chunk.title} ({formatCharLimit(chunk.characters)} characters)
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="text-xs text-amber-300/80 mt-2">
+                    Generating section {selectedChunkIndex + 1} of {sourceChunks.length}: {formatCharLimit(selectedMarkdown.length)} characters
+                  </p>
+                </div>
+              )}
             </>
           )}
 
           {/* KB MODE */}
           {inputMode === "kb" && (
             <div className="space-y-4 rounded-xl border border-violet-500/30 bg-violet-500/5 backdrop-blur-md p-4">
+
+              {sourceChunks.length > 1 && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+                  <label className="block text-sm font-medium text-slate-200">
+                    Retrieved knowledge is large
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Select one retrieved section to generate rather than sending all chunks in one request.
+                  </p>
+                  <select
+                    value={selectedChunkIndex}
+                    onChange={(e) => {
+                      setSelectedChunkIndex(Number(e.target.value));
+                      setUserPromptDirty(false);
+                      setPlan(null);
+                      setError(null);
+                    }}
+                    className={selectCls + " mt-2"}
+                  >
+                    {sourceChunks.map((chunk) => (
+                      <option key={chunk.index} value={chunk.index}>
+                        {chunk.index + 1}. {chunk.title} ({formatCharLimit(chunk.characters)} characters)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {kbConfigured === false && (
                 <div className="rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-2.5 text-xs text-amber-300">
@@ -745,6 +879,66 @@ export default function Home() {
                   )}
                   {geminiModelPreset !== "custom" && selectedGeminiModel?.hint && (
                     <p className="text-xs text-slate-500">{selectedGeminiModel.hint}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Groq model */}
+              {provider === "groq" && (
+                <div className={cardCls}>
+                  <label className="block text-sm font-medium text-slate-200">Groq model</label>
+                  <p className="text-xs text-slate-500">Use a fast, low-cost Groq model or enter a custom model ID.</p>
+                  <select
+                    value={groqModelPreset}
+                    onChange={(e) => setGroqModelPreset(e.target.value)}
+                    className={selectCls}
+                  >
+                    {GROQ_MODELS.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                    <option value="custom">Custom model id…</option>
+                  </select>
+                  {groqModelPreset === "custom" && (
+                    <input
+                      type="text"
+                      value={groqCustomModel}
+                      onChange={(e) => setGroqCustomModel(e.target.value)}
+                      placeholder="e.g. llama-3.3-70b-versatile"
+                      className={inputCls}
+                    />
+                  )}
+                  {groqModelPreset !== "custom" && selectedGroqModel?.hint && (
+                    <p className="text-xs text-slate-500">{selectedGroqModel.hint}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Ollama model */}
+              {provider === "ollama" && (
+                <div className={cardCls}>
+                  <label className="block text-sm font-medium text-slate-200">Local Ollama model</label>
+                  <p className="text-xs text-slate-500">List models from your local Ollama server or enter a custom model name.</p>
+                  <select
+                    value={ollamaModelPreset}
+                    onChange={(e) => setOllamaModelPreset(e.target.value)}
+                    className={selectCls}
+                  >
+                    {ollamaModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                    <option value="custom">Custom model name…</option>
+                  </select>
+                  {ollamaModelPreset === "custom" && (
+                    <input
+                      type="text"
+                      value={ollamaCustomModel}
+                      onChange={(e) => setOllamaCustomModel(e.target.value)}
+                      placeholder="e.g. llama3.1:8b"
+                      className={inputCls}
+                    />
+                  )}
+                  {ollamaModelPreset !== "custom" && selectedOllamaModel?.hint && (
+                    <p className="text-xs text-slate-500">{selectedOllamaModel.hint}</p>
                   )}
                 </div>
               )}
