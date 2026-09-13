@@ -1,7 +1,7 @@
 # CLAUDE.md — markdown-to-action-plan
 
 ## What this is
-**markdown-to-action-plan** converts uploaded Markdown (plus PDF/YouTube input) into a structured, tactical "Master Implementation Playbook" via multiple LLM providers (OpenAI, Perplexity, Gemini, OpenRouter), with export to Markdown/Word/Google Docs. Next.js 16 (App Router) + React 19 + TypeScript, with an optional standalone MCP server exposing the same generation logic and an optional Pinecone-backed Knowledge Base query mode.
+**markdown-to-action-plan** converts uploaded Markdown (plus PDF/YouTube input) into a structured, tactical "Master Implementation Playbook" via multiple LLM providers (OpenAI, Perplexity, Gemini, OpenRouter, Groq, Ollama), with export to Markdown/Word/Google Docs. Next.js 16 (App Router) + React 19 + TypeScript, with an optional standalone MCP server exposing the same generation logic and an optional Pinecone-backed Knowledge Base query mode.
 
 ## Architecture map
 ```
@@ -44,7 +44,7 @@ src/
 - Windows: `run.bat` / `start-action-plan.bat` (dev + browser, auto-cleans port 3000) · `stop-action-plan.bat` (kill stuck dev server) · `check-llms.bat`
 
 ## Environment (`.env.local`)
-Set only the providers you use: `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`. Optional: `OPENROUTER_MODEL` (default in code: `openai/gpt-4o-mini`), `GENERATE_API_SECRET` (protects `/api/generate` and `/api/export/docx` when deployed), `MAX_MARKDOWN_CHARS`, `LLM_REQUEST_TIMEOUT_MS`.
+Set only the providers you use: `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`. Local Ollama does not require an API key (defaults to `http://localhost:11434`). Optional: `OPENROUTER_MODEL`, `GROQ_MODEL`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, `GENERATE_API_SECRET` (protects `/api/generate` and `/api/export/docx` when deployed), `MAX_MARKDOWN_CHARS`, `LLM_REQUEST_TIMEOUT_MS`.
 
 For the Knowledge Base query mode: `PINECONE_API_KEY` (required), `PINECONE_INDEX` (default `peace`). `PINECONE_HOST` is auto-discovered via `describeIndex` — no manual configuration needed.
 

@@ -12,6 +12,7 @@
     "pm2:restart": "pm2 restart ecosystem.config.js",
     "lint": "eslint",
     "mcp": "npx tsx src/mcp-server.ts",
+    "check:chunker": "npx tsx src/scripts/check-chunker.ts",
     "check:llms": "npx tsx src/scripts/provider-smoke.ts"
   },
   "dependencies": {

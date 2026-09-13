@@ -8,7 +8,7 @@ Unlike standard AI summaries, this tool focuses on **tactical execution**—prov
 
 - **Unified Master Plan:** Consolidates multiple source files into one logical, step-by-step implementation document.
 - **Tactical & Atomic:** Every action is described in terms of specific UI interactions (buttons, menus, URLs) and expected outcomes.
-- **Multi-Provider Support:** Switch between **OpenAI (GPT-4o / GPT-4o mini)**, **Perplexity (Sonar)**, **Gemini 2.0 Flash**, and **OpenRouter** (GPT-4o mini, Qwen, Llama, Mistral presets).
+- **Multi-Provider & Local Model Support:** Switch between **OpenAI (GPT-4o)**, **Perplexity (Sonar)**, **Gemini (Flash/Pro)**, **OpenRouter**, **Groq**, and **Local Ollama** (`gpt-oss:20b`, `qwen3-coder:30b`, etc. - zero API cost and 100% private).
 - **Milestone Tracking:** High-level milestones with explicit "✅ Done when" criteria to track your progress.
 - **Flexible Export Options:**
   - **Download .md:** Full raw markdown for your local notes.
@@ -20,7 +20,7 @@ Unlike standard AI summaries, this tool focuses on **tactical execution**—prov
 
 - **Framework:** Next.js 16 (App Router)
 - **Styling:** Tailwind CSS 4
-- **AI Integration:** Standard OpenAI-compatible API fetching
+- **AI Integration:** Standard OpenAI-compatible API fetching + Ollama API integration
 - **Markdown Rendering:** `react-markdown` + `remark-gfm`
 - **Document Export:** `html-to-docx` (Server-side) + `file-saver`
 
@@ -36,12 +36,17 @@ npm install
 ```
 
 ### 3. Environment Variables
-Create a `.env.local` file in the root directory and add your API keys:
+Create a `.env.local` file in the root directory and add your API keys (or use local Ollama without an API key):
 ```text
 OPENAI_API_KEY=your_key
 PERPLEXITY_API_KEY=your_key
 GEMINI_API_KEY=your_key
 OPENROUTER_API_KEY=your_key
+GROQ_API_KEY=your_key
+
+# Optional local Ollama overrides (defaults to http://localhost:11434)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=gpt-oss:20b
 ```
 
 ### 4. Running the Web App

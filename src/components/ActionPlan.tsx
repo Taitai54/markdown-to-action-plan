@@ -170,9 +170,10 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
     if (plan) setDownloadFilename(defaultDownloadName);
   }, [plan, defaultDownloadName]);
 
+  const planTitle = plan?.title;
   useEffect(() => {
-    if (plan) setMilestoneDone(loadMilestoneDone(plan.title));
-  }, [plan?.title]);
+    if (planTitle) setMilestoneDone(loadMilestoneDone(planTitle));
+  }, [planTitle]);
 
   const toggleMilestone = (index: number) => {
     if (!plan) return;

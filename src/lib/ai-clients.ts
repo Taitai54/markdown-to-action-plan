@@ -13,7 +13,7 @@ const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
     endpoint: "https://api.openai.com/v1/chat/completions",
-    model: "gpt-5.5",
+    model: process.env.OPENAI_MODEL || "gpt-4o",
   },
   perplexity: {
     apiKey: process.env.PERPLEXITY_API_KEY,
@@ -402,6 +402,11 @@ export async function generateActionPlan(
   if (provider === "ollama") {
     body.stream = false;
     body.format = "json";
+    body.options = {
+      num_ctx: Number(process.env.OLLAMA_NUM_CTX || 16384),
+      num_predict: Number(process.env.OLLAMA_NUM_PREDICT || 4096),
+      temperature: 0.3,
+    };
   } else if (supportsJsonObjectMode(provider)) {
     body.response_format = { type: "json_object" };
   }
@@ -427,10 +432,10 @@ export async function generateActionPlan(
 
   const data = await response.json();
   const content =
-    provider === "ollama"
-      ? data.message?.content
-      : data.choices?.[0]?.message?.content;
-  if (!content) {
+    (provider === "ollama"
+      ? (data.message?.content || data.response || data.choices?.[0]?.message?.content)
+      : data.choices?.[0]?.message?.content) || "";
+  if (!content || !content.trim()) {
     throw new Error(`No content in ${provider} response`);
   }
 

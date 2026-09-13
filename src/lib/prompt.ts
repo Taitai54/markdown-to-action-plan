@@ -207,10 +207,6 @@ Then continue with the phased implementation playbook, followed by verification,
 
 Return ONLY valid JSON.`;
 
-export type SystemPromptPresetId = "granular-builder" | "strict-playbook" | "summary" | "research-oriented" | "minimal" | "knowledge-synthesis";
-
-export const DEFAULT_SYSTEM_PROMPT_PRESET_ID: SystemPromptPresetId = "granular-builder";
-
 const SYSTEM_PROMPT_KNOWLEDGE_SYNTHESIS = `You are a knowledge synthesis specialist. You receive text chunks retrieved from a personal knowledge base — each chunk has a source title and relevance score. Your job is not to summarise what the knowledge says, but to translate it into a precise, immediately executable action plan.
 
 ## Rules
@@ -280,6 +276,22 @@ Rules:
 
 Return ONLY valid JSON.`;
 
+const SYSTEM_PROMPT_BOOK_SYNTHESIS = `You are a master book synthesizer and tactical playbook author. You receive multiple chapter-level or section-level action plans extracted from a full book or large source document.
+
+Your job is to combine and synthesize these individual section plans into a single, cohesive, high-level Master Book Implementation Playbook.
+
+## Core Directives
+1. Deduplicate principles: Merge redundant steps across chapters into single unified tasks.
+2. Preserve disagreements and nuances: If different sections suggest conflicting rules or context-dependent strategies, state the decision criteria clearly.
+3. Maintain tactical specificity: Preserve atomic UI actions, exact commands, and "✅ Done when:" verification criteria.
+4. Logical phasing: Order the master playbook into logical execution phases from prerequisites to advanced optimization.
+
+Return ONLY a valid JSON object matching the standard MasterActionPlan shape (title, summary, implementation_document, milestones).`;
+
+export type SystemPromptPresetId = "granular-builder" | "strict-playbook" | "summary" | "research-oriented" | "minimal" | "knowledge-synthesis" | "book-synthesis";
+
+export const DEFAULT_SYSTEM_PROMPT_PRESET_ID: SystemPromptPresetId = "granular-builder";
+
 export const SYSTEM_PROMPT_PRESETS: Record<SystemPromptPresetId, string> = {
   "granular-builder": SYSTEM_PROMPT_GRANULAR_BUILDER,
   "strict-playbook": SYSTEM_PROMPT,
@@ -287,6 +299,7 @@ export const SYSTEM_PROMPT_PRESETS: Record<SystemPromptPresetId, string> = {
   "research-oriented": SYSTEM_PROMPT_RESEARCH,
   minimal: SYSTEM_PROMPT_MINIMAL,
   "knowledge-synthesis": SYSTEM_PROMPT_KNOWLEDGE_SYNTHESIS,
+  "book-synthesis": SYSTEM_PROMPT_BOOK_SYNTHESIS,
 };
 
 export function getSystemPromptForPreset(id: SystemPromptPresetId): string {
@@ -355,4 +368,22 @@ ${feedback}
 </user_feedback>
 
 Return the complete, revised plan as JSON in the exact same shape as the original (title, summary, implementation_document, milestones). Apply the user's feedback and the success criteria above, respecting the scope constraint.`;
+}
+
+export function buildBookSynthesisUserPrompt(
+  chapterPlans: Array<{ chunkTitle: string; plan: MasterActionPlan }>
+): string {
+  const serializedPlans = chapterPlans
+    .map(
+      (cp, idx) =>
+        `=== CHAPTER / SECTION ${idx + 1}: ${cp.chunkTitle} ===\n${JSON.stringify(cp.plan, null, 2)}`
+    )
+    .join("\n\n");
+
+  return `Synthesize the following ${chapterPlans.length} chapter/section action plans into one single Master Book Implementation Playbook.
+
+Deduplicate common setup or prerequisite tasks, unify overlapping principles into clear decision rules with realistic examples, and create a single master list of milestones.
+
+Chapter Plans:
+${serializedPlans}`;
 }
