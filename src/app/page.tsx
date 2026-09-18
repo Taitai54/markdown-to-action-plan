@@ -5,8 +5,16 @@ import DropZone from "@/components/DropZone";
 import ApiSelector from "@/components/ApiSelector";
 import FileList from "@/components/FileList";
 import ActionPlan from "@/components/ActionPlan";
+import SavedSessionsModal from "@/components/SavedSessionsModal";
+import PineconeUploadModal from "@/components/PineconeUploadModal";
 
 import { MasterActionPlan, type Provider } from "@/lib/ai-clients";
+import {
+  saveSession,
+  generateSessionId,
+  type SavedBookSession,
+  type SectionPlanEntry,
+} from "@/lib/storage";
 import {
   buildUserPrompt,
   buildKbUserPrompt,
@@ -109,6 +117,14 @@ export default function Home() {
   const [ollamaCustomModel, setOllamaCustomModel] = useState("");
   const [chunkSize, setChunkSize] = useState(DEFAULT_CHUNK_CHARS);
   const [selectedChunkIndex, setSelectedChunkIndex] = useState(0);
+  const [synthesizing, setSynthesizing] = useState(false);
+  const [synthesisProgress, setSynthesisProgress] = useState("");
+
+  // Offline / Persistence state
+  const [sectionPlans, setSectionPlans] = useState<Record<number, SectionPlanEntry>>({});
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [savedSessionsOpen, setSavedSessionsOpen] = useState(false);
+  const [pineconeUploadOpen, setPineconeUploadOpen] = useState(false);
 
   // YouTube ingestion
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -146,7 +162,14 @@ export default function Home() {
     () => splitMarkdownIntoChunks(activeMarkdown, chunkSize),
     [activeMarkdown, chunkSize]
   );
-  const selectedMarkdown = sourceChunks[selectedChunkIndex]?.content ?? activeMarkdown;
+  const selectedMarkdown = useMemo(() => {
+    const raw = sourceChunks[selectedChunkIndex]?.content ?? activeMarkdown;
+    if (sourceChunks.length > 1 && sourceChunks[selectedChunkIndex]) {
+      const chunk = sourceChunks[selectedChunkIndex];
+      return `[Source Context: Section ${chunk.index + 1} of ${sourceChunks.length} - "${chunk.title}"]\n\n${raw}`;
+    }
+    return raw;
+  }, [sourceChunks, selectedChunkIndex, activeMarkdown]);
   const defaultUserPrompt = useMemo(
     () =>
       inputMode === "kb" && kbResults
@@ -246,14 +269,55 @@ export default function Home() {
       .catch(() => setKbConfigured(false));
   }, []);
 
+  // --- IndexedDB persistence helpers ---
+  const persistCurrentSession = useCallback(
+    async (
+      updatedFiles: UploadedFile[],
+      updatedChunkSize: number,
+      updatedSectionPlans: Record<number, SectionPlanEntry>,
+      updatedMasterPlan: MasterActionPlan | null
+    ) => {
+      if (updatedFiles.length === 0) return;
+      const id = currentSessionId || generateSessionId(updatedFiles);
+      if (!currentSessionId) setCurrentSessionId(id);
+      const session: SavedBookSession = {
+        id,
+        title: updatedFiles[0]?.name || "Book Session",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        files: updatedFiles,
+        chunkSize: updatedChunkSize,
+        sectionPlans: updatedSectionPlans,
+        masterPlan: updatedMasterPlan,
+      };
+      await saveSession(session);
+    },
+    [currentSessionId]
+  );
+
+  const handleSelectSession = (session: SavedBookSession) => {
+    setFiles(session.files || []);
+    setChunkSize(session.chunkSize || DEFAULT_CHUNK_CHARS);
+    setSectionPlans(session.sectionPlans || {});
+    setPlan(session.masterPlan || null);
+    setCurrentSessionId(session.id);
+    setSelectedChunkIndex(0);
+    setUserPromptDirty(false);
+  };
+
   // --- handlers ---
-  const handleFilesAdded = useCallback((newFiles: UploadedFile[]) => {
-    setFiles((prev) => {
-      const existingNames = new Set(prev.map((f) => f.name));
-      const unique = newFiles.filter((f) => !existingNames.has(f.name));
-      return [...prev, ...unique];
-    });
-  }, []);
+  const handleFilesAdded = useCallback(
+    (newFiles: UploadedFile[]) => {
+      setFiles((prev) => {
+        const existingNames = new Set(prev.map((f) => f.name));
+        const unique = newFiles.filter((f) => !existingNames.has(f.name));
+        const nextFiles = [...prev, ...unique];
+        persistCurrentSession(nextFiles, chunkSize, sectionPlans, plan);
+        return nextFiles;
+      });
+    },
+    [chunkSize, sectionPlans, plan, persistCurrentSession]
+  );
 
   const handleRemoveFile = useCallback((index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -370,10 +434,181 @@ export default function Home() {
       const data = await res.json() as MasterActionPlan & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to generate");
       setPlan(data);
+
+      if (inputMode === "files" && sourceChunks[selectedChunkIndex]) {
+        const nextPlans: Record<number, SectionPlanEntry> = {
+          ...sectionPlans,
+          [selectedChunkIndex]: { chunkTitle: sourceChunks[selectedChunkIndex].title, plan: data, status: "completed" },
+        };
+        setSectionPlans(nextPlans);
+        await persistCurrentSession(files, chunkSize, nextPlans, data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateSingleSection = async (indexToGenerate: number) => {
+    const chunk = sourceChunks[indexToGenerate];
+    if (!chunk) return;
+    setLoading(true);
+    setError(null);
+
+    const chunkMarkdown = `[Source Context: Section ${chunk.index + 1} of ${sourceChunks.length} - "${chunk.title}"]\n\n${chunk.content}`;
+    const isCustomSystemPrompt =
+      editableSystemPrompt !== "" &&
+      editableSystemPrompt !== getSystemPromptForPreset(systemPromptPresetId);
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          markdown: chunkMarkdown,
+          provider,
+          ...(promptExpanded ? { userPromptOverride: editablePrompt } : {}),
+          ...(isCustomSystemPrompt
+            ? { systemPromptOverride: editableSystemPrompt }
+            : { systemPromptPresetId }),
+          ...(modelOverride != null && modelOverride !== "" ? { modelOverride } : {}),
+        }),
+      });
+
+      const data = (await res.json()) as MasterActionPlan & { error?: string };
+      if (!res.ok || data.error) throw new Error(data.error ?? "Failed to generate section plan");
+
+      const nextPlans: Record<number, SectionPlanEntry> = {
+        ...sectionPlans,
+        [indexToGenerate]: { chunkTitle: chunk.title, plan: data, status: "completed" },
+      };
+      setSectionPlans(nextPlans);
+      await persistCurrentSession(files, chunkSize, nextPlans, plan);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Failed to generate section";
+      const nextPlans: Record<number, SectionPlanEntry> = {
+        ...sectionPlans,
+        [indexToGenerate]: { chunkTitle: chunk.title, plan: null as unknown as MasterActionPlan, status: "failed", error: errMsg },
+      };
+      setSectionPlans(nextPlans);
+      await persistCurrentSession(files, chunkSize, nextPlans, plan);
+      setError(`Section ${indexToGenerate + 1} ("${chunk.title}") failed: ${errMsg}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSynthesizeBook = async () => {
+    if (sourceChunks.length <= 1) return;
+    setSynthesizing(true);
+    setLoading(true);
+    setError(null);
+
+    const isCustomSystemPrompt =
+      editableSystemPrompt !== "" &&
+      editableSystemPrompt !== getSystemPromptForPreset(systemPromptPresetId);
+
+    let currentPlans = { ...sectionPlans };
+
+    try {
+      for (let i = 0; i < sourceChunks.length; i++) {
+        const chunk = sourceChunks[i];
+
+        if (currentPlans[i]?.status === "completed" && currentPlans[i]?.plan) {
+          setSynthesisProgress(
+            `Section ${i + 1} of ${sourceChunks.length}: "${chunk.title}" (ready from store)...`
+          );
+          continue;
+        }
+
+        setSynthesisProgress(
+          `Generating section ${i + 1} of ${sourceChunks.length}: "${chunk.title}"...`
+        );
+
+        const chunkMarkdown = `[Source Context: Section ${chunk.index + 1} of ${sourceChunks.length} - "${chunk.title}"]\n\n${chunk.content}`;
+        try {
+          const res = await fetch("/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              markdown: chunkMarkdown,
+              provider,
+              ...(isCustomSystemPrompt
+                ? { systemPromptOverride: editableSystemPrompt }
+                : { systemPromptPresetId }),
+              ...(modelOverride != null && modelOverride !== "" ? { modelOverride } : {}),
+            }),
+          });
+
+          const data = (await res.json()) as MasterActionPlan & { error?: string };
+          if (res.ok && !data.error) {
+            currentPlans = {
+              ...currentPlans,
+              [i]: { chunkTitle: chunk.title, plan: data, status: "completed" },
+            };
+            setSectionPlans(currentPlans);
+            await persistCurrentSession(files, chunkSize, currentPlans, plan);
+          } else {
+            const errStr = data.error || `HTTP ${res.status}`;
+            currentPlans = {
+              ...currentPlans,
+              [i]: { chunkTitle: chunk.title, plan: null as unknown as MasterActionPlan, status: "failed", error: errStr },
+            };
+            setSectionPlans(currentPlans);
+            await persistCurrentSession(files, chunkSize, currentPlans, plan);
+            setError(`Synthesis paused on Section ${i + 1} ("${chunk.title}"): ${errStr}. Click "Resume Synthesis" to retry remaining sections.`);
+            setSynthesizing(false);
+            setLoading(false);
+            return;
+          }
+        } catch (sectionErr) {
+          const errStr = sectionErr instanceof Error ? sectionErr.message : "Network or timeout error";
+          currentPlans = {
+            ...currentPlans,
+            [i]: { chunkTitle: chunk.title, plan: null as unknown as MasterActionPlan, status: "failed", error: errStr },
+          };
+          setSectionPlans(currentPlans);
+          await persistCurrentSession(files, chunkSize, currentPlans, plan);
+          setError(`Synthesis paused on Section ${i + 1} ("${chunk.title}"): ${errStr}. Click "Resume Synthesis" to retry remaining sections.`);
+          setSynthesizing(false);
+          setLoading(false);
+          return;
+        }
+      }
+
+      const completedChapterPlans = Object.entries(currentPlans)
+        .filter(([key, entry]) => key !== undefined && entry.status === "completed" && entry.plan)
+        .map(([key, entry]) => ({ chunkTitle: entry.chunkTitle, plan: entry.plan, sectionIndex: Number(key) }));
+
+      if (completedChapterPlans.length === 0) {
+        throw new Error("Could not generate plans for any section. Check your API key or model selection.");
+      }
+
+      setSynthesisProgress(
+        `Synthesizing Master Book Implementation Playbook from ${completedChapterPlans.length} section plans...`
+      );
+      const synthRes = await fetch("/api/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chapterPlans: completedChapterPlans,
+          provider,
+          ...(modelOverride != null && modelOverride !== "" ? { modelOverride } : {}),
+        }),
+      });
+
+      const synthData = (await synthRes.json()) as MasterActionPlan & { error?: string };
+      if (!synthRes.ok) throw new Error(synthData.error ?? "Failed to synthesize master book playbook");
+
+      setPlan(synthData);
+      await persistCurrentSession(files, chunkSize, currentPlans, synthData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Synthesis failed");
+    } finally {
+      setSynthesizing(false);
+      setLoading(false);
+      setSynthesisProgress("");
     }
   };
 
@@ -433,13 +668,22 @@ export default function Home() {
       <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-8 lg:py-10">
 
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white tracking-tight">
-            Markdown to Action Plan
-          </h1>
-          <p className="text-slate-400 mt-1">
-            Upload files or query your knowledge base — AI turns your content into a structured, executable plan
-          </p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+              <span>Markdown to Action Plan</span>
+            </h1>
+            <p className="text-slate-400 mt-1 text-sm">
+              Upload files or query your knowledge base — AI turns your content into a structured, executable plan
+            </p>
+          </div>
+          <button
+            onClick={() => setSavedSessionsOpen(true)}
+            className="self-start sm:self-auto px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 font-medium text-xs flex items-center gap-2 transition-all shadow-sm"
+            title="Open saved books and offline sessions"
+          >
+            <span>📚</span> Saved Books & Offline Sessions
+          </button>
         </div>
 
         <div className="space-y-6">
@@ -517,7 +761,7 @@ export default function Home() {
                       Uploaded Files ({files.length})
                     </h2>
                     <button
-                      onClick={() => { setFiles([]); setPlan(null); setUserPromptDirty(false); }}
+                      onClick={() => { setFiles([]); setPlan(null); setSectionPlans({}); setCurrentSessionId(null); setUserPromptDirty(false); }}
                       className="text-xs text-red-400 hover:text-red-300 font-medium transition-colors"
                     >
                       Clear All
@@ -532,10 +776,10 @@ export default function Home() {
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
                       <label className="block text-sm font-medium text-slate-200">
-                        Large source detected
+                        Large book / source detected
                       </label>
-                      <p className="text-xs text-slate-500 mt-1">
-                        This source is split at headings and paragraph boundaries so it fits more reliably in the selected model&apos;s context. Generate one section at a time.
+                      <p className="text-xs text-slate-400 mt-1">
+                        Split into {sourceChunks.length} sections. Sections save to your local browser storage as they complete, so you can stop, resume, or reload offline anytime.
                       </p>
                     </div>
                     <label className="text-xs text-slate-400 whitespace-nowrap">
@@ -543,26 +787,94 @@ export default function Home() {
                       <select
                         value={chunkSize}
                         onChange={(e) => {
-                          setChunkSize(Number(e.target.value));
+                          const newSize = Number(e.target.value);
+                          setChunkSize(newSize);
                           setSelectedChunkIndex(0);
                           setUserPromptDirty(false);
+                          persistCurrentSession(files, newSize, sectionPlans, plan);
                         }}
                         className="ml-2 rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
                       >
-                        <option value={60000}>60k characters</option>
-                        <option value={DEFAULT_CHUNK_CHARS}>120k characters</option>
-                        <option value={240000}>240k characters</option>
+                        <option value={40000}>40k chars (Recommended for offline Ollama)</option>
+                        <option value={60000}>60k chars</option>
+                        <option value={DEFAULT_CHUNK_CHARS}>120k chars (Default)</option>
+                        <option value={240000}>240k chars</option>
                       </select>
                     </label>
                   </div>
+
+                  {provider === "ollama" && (
+                    <div className="mt-2 text-xs text-amber-300/90 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                      <span>💡</span>
+                      <span>
+                        <strong>Offline Ollama Tip:</strong> For laptops running on battery or on the move, 40k–60k character chunks run significantly faster and avoid local RAM timeouts.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Interactive Section Progress Grid */}
+                  <div className="mt-3 pt-3 border-t border-amber-500/20 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-300">
+                      <span className="font-semibold uppercase tracking-wider text-[11px] text-amber-400">
+                        Section Progress ({Object.values(sectionPlans).filter((p) => p.status === "completed").length} / {sourceChunks.length} Ready)
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-52 overflow-y-auto pr-1">
+                      {sourceChunks.map((chunk, idx) => {
+                        const entry = sectionPlans[idx];
+                        const isDone = entry?.status === "completed";
+                        const isFailed = entry?.status === "failed";
+                        const isCurrent = selectedChunkIndex === idx;
+
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => setSelectedChunkIndex(idx)}
+                            className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                              isCurrent
+                                ? "ring-1 ring-amber-400 border-amber-500/80 bg-slate-900"
+                                : isDone
+                                ? "bg-green-950/20 border-green-500/30 text-green-300"
+                                : isFailed
+                                ? "bg-red-950/30 border-red-500/40 text-red-300"
+                                : "bg-slate-900/60 border-slate-700/60 text-slate-300 hover:border-slate-600"
+                            }`}
+                          >
+                            <div className="truncate flex-1 min-w-0">
+                              <div className="font-semibold truncate">
+                                {idx + 1}. {chunk.title}
+                              </div>
+                              <div className="text-[10px] opacity-70">
+                                {formatCharLimit(chunk.characters)} chars
+                              </div>
+                            </div>
+                            <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                              {isDone && <span title="Section plan saved">✅</span>}
+                              {isFailed && <span title={entry?.error || "Failed"}>❌</span>}
+                              <button
+                                type="button"
+                                onClick={() => handleGenerateSingleSection(idx)}
+                                disabled={loading || synthesizing}
+                                className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-[10px] text-slate-200 font-medium disabled:opacity-50 transition-colors"
+                                title={isDone ? "Regenerate section plan" : "Generate this section"}
+                              >
+                                {isDone ? "Re-gen" : isFailed ? "Retry" : "Gen"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <label className="block text-sm font-medium text-slate-200 mt-3">
-                    Section to generate
+                    Active Section for Single Generation
                     <select
                       value={selectedChunkIndex}
                       onChange={(e) => {
                         setSelectedChunkIndex(Number(e.target.value));
                         setUserPromptDirty(false);
-                        setPlan(null);
                         setError(null);
                       }}
                       className={selectCls + " mt-1"}
@@ -570,13 +882,48 @@ export default function Home() {
                       {sourceChunks.map((chunk) => (
                         <option key={chunk.index} value={chunk.index}>
                           {chunk.index + 1}. {chunk.title} ({formatCharLimit(chunk.characters)} characters)
+                          {sectionPlans[chunk.index]?.status === "completed" ? " [✅ Ready]" : ""}
                         </option>
                       ))}
                     </select>
                   </label>
-                  <p className="text-xs text-amber-300/80 mt-2">
-                    Generating section {selectedChunkIndex + 1} of {sourceChunks.length}: {formatCharLimit(selectedMarkdown.length)} characters
-                  </p>
+
+                  <div className="mt-4 pt-3 border-t border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-xs text-amber-300/80">
+                      Active: Section {selectedChunkIndex + 1} of {sourceChunks.length} ({formatCharLimit(selectedMarkdown.length)} characters)
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setPineconeUploadOpen(true)}
+                        disabled={loading || synthesizing}
+                        className="px-3.5 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-xs transition-all duration-200 flex items-center justify-center gap-1.5 shadow-md border border-emerald-500/40 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        title="Embed and upload all sections to Pinecone vector store using local embeddings (multilingual-e5-large)"
+                      >
+                        <span>🌲</span> Upload to Pinecone ({sourceChunks.length} Chunks)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSynthesizeBook}
+                        disabled={loading || synthesizing}
+                        className="px-4 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        <span>📚</span>{" "}
+                        {Object.values(sectionPlans).some((p) => p.status === "completed")
+                          ? `Resume / Synthesize Full Book (${Object.values(sectionPlans).filter((p) => p.status === "completed").length}/${sourceChunks.length} Ready)`
+                          : `Synthesize Full Book (${sourceChunks.length} Sections)`}
+                      </button>
+                    </div>
+                  </div>
+                  {synthesizing && (
+                    <div className="mt-2 text-xs text-amber-300 flex items-center gap-2 animate-pulse font-medium">
+                      <svg className="animate-spin h-3.5 w-3.5 text-amber-400" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      <span>{synthesisProgress || "Synthesizing full book..."}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -1129,6 +1476,25 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      <SavedSessionsModal
+        isOpen={savedSessionsOpen}
+        onClose={() => setSavedSessionsOpen(false)}
+        onSelectSession={handleSelectSession}
+      />
+
+      <PineconeUploadModal
+        isOpen={pineconeUploadOpen}
+        onClose={() => setPineconeUploadOpen(false)}
+        chunks={sourceChunks.map((c) => ({
+          title: files[0]?.name || "Book Document",
+          section: c.title,
+          text: c.content,
+          docType: "book",
+          source: files[0]?.name || "uploaded_file",
+        }))}
+        defaultTitle={files[0]?.name || "Book Document"}
+      />
     </main>
   );
 }

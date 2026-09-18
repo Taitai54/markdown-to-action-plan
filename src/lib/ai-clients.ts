@@ -191,6 +191,8 @@ function parseRobustJson(content: string): unknown {
   // content (implementation_document routinely contains code blocks), leaving
   // a dangling unescaped newline behind and breaking JSON.parse.
   let cleaned = content.trim();
+  // Strip <think>...</think> reasoning blocks produced by thinking models (e.g. DeepSeek-R1, Qwen-thinking)
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
   cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
 
   // A response that was cut off mid-generation essentially never happens to end
@@ -349,7 +351,7 @@ function normalizeMilestones(milestones: unknown): Milestone[] {
 }
 
 const LLM_TIMEOUT_MS = Number.parseInt(
-  process.env.LLM_REQUEST_TIMEOUT_MS ?? "180000",
+  process.env.LLM_REQUEST_TIMEOUT_MS ?? "600000",
   10
 );
 
@@ -396,15 +398,18 @@ export async function generateActionPlan(
       { role: "system", content: systemContent },
       { role: "user", content: userContent },
     ],
-    temperature: 0.3,
   };
+
+  if (!/^(gpt-5|o1|o3)/i.test(modelName)) {
+    body.temperature = 0.3;
+  }
 
   if (provider === "ollama") {
     body.stream = false;
     body.format = "json";
     body.options = {
-      num_ctx: Number(process.env.OLLAMA_NUM_CTX || 16384),
-      num_predict: Number(process.env.OLLAMA_NUM_PREDICT || 4096),
+      num_ctx: Number(process.env.OLLAMA_NUM_CTX || 65536),
+      num_predict: Number(process.env.OLLAMA_NUM_PREDICT || 8192),
       temperature: 0.3,
     };
   } else if (supportsJsonObjectMode(provider)) {
@@ -433,9 +438,10 @@ export async function generateActionPlan(
   const data = await response.json();
   const content =
     (provider === "ollama"
-      ? (data.message?.content || data.response || data.choices?.[0]?.message?.content)
+      ? (data.message?.content || data.response || data.message?.thinking || data.choices?.[0]?.message?.content)
       : data.choices?.[0]?.message?.content) || "";
   if (!content || !content.trim()) {
+    console.error("[OLLAMA RAW RESPONSE PAYLOAD]:", JSON.stringify(data));
     throw new Error(`No content in ${provider} response`);
   }
 

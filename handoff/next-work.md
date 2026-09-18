@@ -1,35 +1,21 @@
 # Next Work
 
-## Priority 1: Complete-Book Workflow
+## Completed Priority 1: Complete-Book Synthesis API & UI Integration
+- Shipped `/api/synthesize/route.ts` with `SYSTEM_PROMPT_BOOK_SYNTHESIS` and `buildBookSynthesisUserPrompt()`.
+- Added **"Synthesize Full Book"** UI button & progress status indicator in `src/app/page.tsx`. Automatically iterates through all document sections and generates a unified master playbook.
 
-The current chunking implementation lets the reader generate one selected chunk. The next useful behavior is a two-stage workflow:
+## Completed Priority 3: Deterministic Evaluation Fixtures
+- Shipped `src/scripts/check-chunker.ts` (`npm run check:chunker`). Tests single-chunk fallback, section heading isolation, paragraph boundary splitting, and title extraction.
 
-1. Generate a plan for each selected chapter or chunk.
-2. Combine those chapter plans in a separate synthesis request that receives only the chapter outputs and source metadata.
-3. Produce a book-level plan that deduplicates principles, preserves disagreements, and links each conclusion to chapter/source locations.
+## Completed Priority 4: Practice & Decision Rules Loop
+- Shipped **Practice & Decision Rules Self-Check Loop** widget in `src/components/ActionPlan.tsx` with user situation input and persistent local progress tracking.
 
-Keep the existing one-chunk mode as the fast path. Do not send the original full book plus all chapter plans into one request.
-
-## Priority 2: Better Context Preservation
+## Next Priority: Better Context Preservation & Advanced Retrieval
 
 - Keep document boundaries and section headings in every chunk.
-- Add chunk index and total chunk count to the generated source context.
+- Add chunk index and total chunk count to the generated source context (partially completed).
 - Preserve YouTube timestamps in a structured way rather than only inline text if the response contract is expanded.
-- Investigate whether the installed `pdf-parse` version exposes page-level text; if it does, return page markers. If not, state that limitation clearly.
 - Pass KB metadata such as `title`, `source`, `docType`, `section`, score, and chunk ID in a structured context block.
-
-## Priority 3: Evaluation Fixtures
-
-Turn the manual rubric into executable fixture checks without adding a new test framework prematurely. A small script can validate deterministic chunking properties first:
-
-- small input returns one full-source chunk;
-- headings remain in the same chunk as their section content;
-- no chunk exceeds the requested target except only where a deliberately oversized atomic fragment is handled by fallback;
-- concatenating chunks preserves source content in order.
-
-Then add saved model-output fixtures or a provider smoke mode for qualitative scoring.
-
-## Priority 4: Practice Loop
 
 Add exercises and self-checks after the generated plan has proven useful:
 

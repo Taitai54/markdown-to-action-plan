@@ -7,6 +7,9 @@
 ```
 src/
   app/api/generate/route.ts       # main generate endpoint — prompt overrides → generateActionPlan()
+  app/api/refine/route.ts         # plan refinement with feedback
+  app/api/synthesize/route.ts     # multi-chunk / whole-book synthesis endpoint
+  app/api/ollama-models/route.ts  # dynamic local Ollama model catalog
   app/api/parse-pdf/route.ts      # PDF upload → pdf-parse → { text }
   app/api/transcript/route.ts     # YouTube URL → oEmbed title + transcript
   app/api/export/docx/route.ts    # Word export via html-to-docx
@@ -17,9 +20,11 @@ src/
   lib/ai-clients.ts               # all LLM provider calls + JSON repair/validation
   lib/prompt.ts                   # system ("master") presets + user message builder
   lib/markdown-parser.ts          # concatenates uploaded files
+  lib/chunker.ts                  # splits large markdown into section chunks
   lib/api-auth.ts                 # GENERATE_API_SECRET guard for generate/export routes
   lib/limits.ts                   # char limits (MAX_MARKDOWN_CHARS etc.)
   mcp-server.ts                   # standalone MCP server, same generation logic
+  scripts/check-chunker.ts        # npm run check:chunker — deterministic chunker validation
   scripts/provider-smoke.ts       # npm run check:llms — smoke test each configured provider
 ```
 
@@ -34,13 +39,13 @@ src/
 ## Ground rules (conventions)
 - **Types:** LLM output is validated with hand-rolled type guards (`validateActionPlan`/`normalizeMilestones` in `ai-clients.ts`), not `zod` — `zod` is a dependency but reserved for MCP tool schemas (`mcp-server.ts`).
 - **Errors:** fail fast with explicit thrown `Error` messages on unrecoverable failures (missing API key, non-OK response, unparseable JSON — see `generateActionPlan`/`parseRobustJson`); degrade gracefully on per-item validation (`normalizeMilestones` skips invalid milestones with `console.warn` instead of failing the whole plan).
-- **Testing:** no automated test suite exists — "done" means `npm run lint` passes.
+- **Testing:** run `npm run lint` for code style, `npm run check:chunker` for deterministic chunking, and `npm run check:llms` for provider verification.
 
 ## Working principles (agent steering)
 - **Cross-platform tooling:** this project develops on Windows — verify shell commands work in PowerShell before assuming a Linux-only tool (e.g. `tree`) behaves the same; scope any OS branching explicitly rather than assuming Linux.
 
 ## Commands
-- install: `npm install` · dev: `npm run dev` (webpack, not Turbopack — Turbopack can fail with "Access is denied" on Windows) · lint: `npm run lint` · provider smoke test: `npm run check:llms` · mcp server: `npm run mcp`
+- install: `npm install` · dev: `npm run dev` (webpack, not Turbopack — Turbopack can fail with "Access is denied" on Windows) · lint: `npm run lint` · chunker test: `npm run check:chunker` · provider smoke test: `npm run check:llms` · mcp server: `npm run mcp`
 - Windows: `run.bat` / `start-action-plan.bat` (dev + browser, auto-cleans port 3000) · `stop-action-plan.bat` (kill stuck dev server) · `check-llms.bat`
 
 ## Environment (`.env.local`)

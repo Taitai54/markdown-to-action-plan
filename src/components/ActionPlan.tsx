@@ -73,6 +73,94 @@ function CopyCodeButton({ code }: { code: string }) {
 
 /** Custom code block renderer with Copy Code button */
 const markdownComponents: Components = {
+  h1: ({ children }) => (
+    <h1 className="text-2xl font-bold text-white mt-7 mb-4 pb-2 border-b border-slate-700/80 leading-snug">
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-xl font-bold text-slate-100 mt-6 mb-3 pb-1.5 border-b border-slate-700/50 leading-snug">
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-lg font-semibold text-blue-300 mt-5 mb-2 leading-snug">
+      {children}
+    </h3>
+  ),
+  h4: ({ children }) => (
+    <h4 className="text-base font-semibold text-slate-200 mt-4 mb-2">
+      {children}
+    </h4>
+  ),
+  p: ({ children }) => (
+    <p className="text-slate-200 text-sm leading-relaxed mb-4">
+      {children}
+    </p>
+  ),
+  ul: ({ children }) => (
+    <ul className="list-disc list-outside ml-5 space-y-1.5 mb-4 text-slate-200 text-sm leading-relaxed">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="list-decimal list-outside ml-5 space-y-1.5 mb-4 text-slate-200 text-sm leading-relaxed">
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => (
+    <li className="text-slate-200 text-sm leading-relaxed pl-1">
+      {children}
+    </li>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-bold text-white">
+      {children}
+    </strong>
+  ),
+  em: ({ children }) => (
+    <em className="italic text-slate-300">
+      {children}
+    </em>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-blue-500 bg-slate-900/60 pl-4 pr-3 py-2.5 my-4 rounded-r-lg text-slate-300 text-sm italic shadow-inner">
+      {children}
+    </blockquote>
+  ),
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2 font-medium transition-colors">
+      {children}
+    </a>
+  ),
+  hr: () => <hr className="my-6 border-slate-700/80" />,
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-5 rounded-xl border border-slate-700/60 bg-slate-900/40">
+      <table className="w-full text-left text-sm border-collapse">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-slate-900/90 text-slate-200 border-b border-slate-700">
+      {children}
+    </thead>
+  ),
+  th: ({ children }) => (
+    <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-200 border-b border-slate-700">
+      {children}
+    </th>
+  ),
+  tr: ({ children }) => (
+    <tr className="border-b border-slate-800/80 hover:bg-slate-800/40 transition-colors">
+      {children}
+    </tr>
+  ),
+  td: ({ children }) => (
+    <td className="px-4 py-2.5 text-slate-300 text-sm">
+      {children}
+    </td>
+  ),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   code({ className, children, ...props }: any) {
     const isBlock = className?.startsWith("language-") || String(children).includes("\n");
@@ -80,7 +168,7 @@ const markdownComponents: Components = {
     if (!isBlock) {
       return (
         <code
-          className="bg-slate-700/60 text-blue-300 px-1.5 py-0.5 rounded text-[0.85em] font-mono"
+          className="bg-slate-900 border border-slate-700/60 text-blue-300 px-1.5 py-0.5 rounded text-[0.85em] font-mono font-medium"
           {...props}
         >
           {children}
@@ -91,13 +179,13 @@ const markdownComponents: Components = {
     return (
       <div className="relative group my-4">
         {lang && (
-          <span className="absolute top-2 left-3 text-[10px] uppercase tracking-widest text-slate-500 font-mono select-none">
+          <span className="absolute top-2 left-3 text-[10px] uppercase tracking-widest text-slate-400 font-mono select-none">
             {lang}
           </span>
         )}
         <CopyCodeButton code={codeString} />
-        <pre className={`overflow-x-auto rounded-xl bg-slate-900 border border-slate-700/60 px-4 pb-4 ${lang ? "pt-7" : "pt-4"} text-sm`}>
-          <code className="text-slate-200 font-mono">{children}</code>
+        <pre className={`overflow-x-auto rounded-xl bg-slate-950 border border-slate-700/80 px-4 pb-4 ${lang ? "pt-7" : "pt-4"} text-sm leading-relaxed`}>
+          <code className="text-slate-100 font-mono">{children}</code>
         </pre>
       </div>
     );
@@ -158,6 +246,18 @@ function MilestoneCard({
 export default function ActionPlan({ plan }: ActionPlanProps) {
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [playbookCopied, setPlaybookCopied] = useState(false);
+
+  const copyPlaybookMarkdown = async () => {
+    if (!plan) return;
+    try {
+      await navigator.clipboard.writeText(plan.implementation_document);
+      setPlaybookCopied(true);
+      setTimeout(() => setPlaybookCopied(false), 2000);
+    } catch {
+      // fallback
+    }
+  };
 
   const defaultDownloadName = useMemo(
     () => (plan ? sanitizeFilename(plan.title) : "master-action-plan"),
@@ -377,11 +477,20 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
       {/* Split layout: playbook + milestones */}
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* Implementation playbook */}
-        <div className="rounded-xl border border-slate-700/60 bg-slate-800/60 backdrop-blur-md p-5 shadow-sm">
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
-            Implementation Playbook
-          </h3>
-          <div className="prose prose-sm max-w-none prose-invert prose-headings:text-white prose-headings:font-bold prose-p:text-slate-300 prose-li:text-slate-300 prose-strong:text-white prose-a:text-blue-400 prose-blockquote:border-blue-500 prose-blockquote:text-slate-400 prose-hr:border-slate-700">
+        <div className="rounded-xl border border-slate-700/60 bg-slate-800/60 backdrop-blur-md p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-3 mb-5 pb-3 border-b border-slate-700/60">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+              Implementation Playbook
+            </h3>
+            <button
+              onClick={copyPlaybookMarkdown}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600/60 transition-all duration-150 flex items-center gap-1.5 font-medium"
+              title="Copy playbook text as raw Markdown"
+            >
+              <span>{playbookCopied ? "✓ Copied!" : "📋 Copy Markdown"}</span>
+            </button>
+          </div>
+          <div className="space-y-1">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
               {plan.implementation_document}
             </ReactMarkdown>
@@ -412,8 +521,115 @@ export default function ActionPlan({ plan }: ActionPlanProps) {
               No milestones returned for this plan.
             </div>
           )}
+
+          {/* Practice & Self-Check Loop */}
+          <PracticeLoopSection planTitle={plan.title} />
         </aside>
       </section>
+    </div>
+  );
+}
+
+function loadPracticeState(planTitle: string) {
+  if (typeof window === "undefined") return { userContext: "", completedItems: {} as Record<string, boolean> };
+  try {
+    const raw = localStorage.getItem(`map-practice:${sanitizeFilename(planTitle)}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        userContext: (parsed.userContext as string) || "",
+        completedItems: (parsed.completedItems as Record<string, boolean>) || {},
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { userContext: "", completedItems: {} as Record<string, boolean> };
+}
+
+function PracticeLoopSection({ planTitle }: { planTitle: string }) {
+  const storageKey = `map-practice:${sanitizeFilename(planTitle)}`;
+  const [userContext, setUserContext] = useState(() => loadPracticeState(planTitle).userContext);
+  const [completedItems, setCompletedItems] = useState(() => loadPracticeState(planTitle).completedItems);
+
+  const savePractice = (ctx: string, items: Record<string, boolean>) => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ userContext: ctx, completedItems: items }));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const toggleCheck = (id: string) => {
+    const next = { ...completedItems, [id]: !completedItems[id] };
+    setCompletedItems(next);
+    savePractice(userContext, next);
+  };
+
+  const handleContextChange = (text: string) => {
+    setUserContext(text);
+    savePractice(text, completedItems);
+  };
+
+  const practiceChecks = [
+    { id: "p1", title: "Defined target context & constraints for this playbook" },
+    { id: "p2", title: "Verified all prerequisite API keys, accounts, and CLI tools" },
+    { id: "p3", title: "Executed initial setup step and verified output against ✅ Done when criteria" },
+    { id: "p4", title: "Tested edge cases / failure modes described in decision rules" },
+  ];
+
+  return (
+    <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 backdrop-blur-md p-4 shadow-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-bold text-violet-300 flex items-center gap-1.5 uppercase tracking-wider">
+            <span>🎯</span> Practice & Decision Rules
+          </h3>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Apply extracted decision rules to your specific environment and track your trial.
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-medium text-slate-300 mb-1">
+          Your Specific Situation / Context:
+        </label>
+        <textarea
+          value={userContext}
+          onChange={(e) => handleContextChange(e.target.value)}
+          placeholder="e.g. Building a SaaS app with 5,000 users on macOS with local Ollama fallback..."
+          rows={2}
+          className="w-full rounded-lg border border-slate-700 bg-slate-900/80 px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:border-violet-500 focus:outline-none"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          Practice Checklist
+        </label>
+        {practiceChecks.map((item) => {
+          const isDone = !!completedItems[item.id];
+          return (
+            <label
+              key={item.id}
+              className={`flex items-start gap-2 p-2 rounded-lg border text-[11px] cursor-pointer transition-colors ${
+                isDone
+                  ? "bg-violet-950/20 border-violet-500/20 text-slate-400 line-through"
+                  : "bg-slate-800/40 border-slate-700/50 text-slate-200 hover:border-slate-600"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isDone}
+                onChange={() => toggleCheck(item.id)}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-slate-600 accent-violet-500 shrink-0"
+              />
+              <span>{item.title}</span>
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }
