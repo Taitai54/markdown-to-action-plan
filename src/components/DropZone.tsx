@@ -103,7 +103,8 @@ export default function DropZone({ onFilesAdded }: DropZoneProps) {
           : "border-slate-600 hover:border-slate-500 bg-slate-800/60 backdrop-blur-md"
       }`}
     >
-      <input {...getInputProps()} />
+      {/* Browser extensions may inject data-cnp-create-listener before hydration. */}
+      <input {...getInputProps()} suppressHydrationWarning />
       <div className="flex flex-col items-center gap-3">
         {processing ? (
           <>
